@@ -1,11 +1,10 @@
-<video id="cam" autoplay width="320" height="240"></video>
+<video id="cam" autoplay playsinline width="320" height="240"></video>
 <canvas id="frame" width="320" height="240"></canvas>
 
 <div>
-  <!-- Pemanggilan fungsi yang disesuaikan -->
-  <button onclick="tanganiMulaiKamera()">Buka Kamera</button>
-  <button onclick="tanganiAmbilFrame()">Ambil Frame</button>
-  <button onclick="tanganiHitungKecerahan()">Rata Kecerahan</button>
+    <button onclick="tanganiMulaiKamera()">Buka Kamera</button>
+    <button onclick="tanganiAmbilFrame()">Ambil Frame</button>
+    <button onclick="tanganiHitungKecerahan()">Rata Kecerahan</button>
 </div>
 
 <p id="hasil">Kecerahan: -</p>
@@ -14,46 +13,170 @@
 let videoElem = document.getElementById('cam');
 let canvasElem = document.getElementById('frame');
 let lastImageData = null;
+let cameraStream = null;
 
+
+// ==================================================
+// 1. MEMBUKA KAMERA DAN MEMINTA IZIN
+// ==================================================
 async function mulaiKamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    videoElem.srcObject = stream;
-    await videoElem.play();
-    return videoElem;
+
+    try {
+
+        // Bagian ini yang meminta izin akses kamera
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+        });
+
+        // Menampilkan kamera ke elemen <video>
+        videoElem.srcObject = cameraStream;
+
+        await videoElem.play();
+
+        return videoElem;
+
+    } catch (error) {
+
+        console.error("Gagal mengakses kamera:", error);
+
+        if (error.name === "NotAllowedError") {
+            alert("Izin kamera ditolak. Silakan izinkan akses kamera pada browser.");
+        } 
+        else if (error.name === "NotFoundError") {
+            alert("Kamera tidak ditemukan.");
+        } 
+        else {
+            alert("Tidak dapat membuka kamera: " + error.message);
+        }
+
+        return null;
+    }
 }
 
+
+// ==================================================
+// 2. HANDLER TOMBOL BUKA KAMERA
+// ==================================================
+async function tanganiMulaiKamera() {
+
+    const video = await mulaiKamera();
+
+    if (video) {
+        document.getElementById('hasil').innerText =
+            "Kamera aktif. Silakan ambil frame.";
+    }
+}
+
+
+// ==================================================
+// 3. MENGAMBIL FRAME DARI KAMERA
+// ==================================================
 function ambilFrame(video, canvas) {
+
     const ctx = canvas.getContext('2d');
+
+    // Mengikuti ukuran video kamera
     canvas.width = video.videoWidth || 320;
     canvas.height = video.videoHeight || 240;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    // Mengambil gambar dari video
+    ctx.drawImage(
+        video,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    // Mengambil data pixel
+    return ctx.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 }
 
-function rataKecerahan(imageData) {
-    const d = imageData.data;
-    let total = 0;
-    for (let i = 0; i < d.length; i += 4) {
-        total += (d[i] + d[i + 1] + d[i + 2]) / 3;
-    }
-    return total / (d.length / 4);
-}
 
-// Fungsi handler untuk event onclick tombol
-async function tanganiMulaiKamera() {
-    await mulaiKamera();
-}
-
+// ==================================================
+// 4. HANDLER TOMBOL AMBIL FRAME
+// ==================================================
 function tanganiAmbilFrame() {
-    lastImageData = ambilFrame(videoElem, canvasElem);
+
+    // Pastikan kamera sudah aktif
+    if (!cameraStream) {
+        alert("Silakan buka kamera terlebih dahulu.");
+        return;
+    }
+
+    lastImageData = ambilFrame(
+        videoElem,
+        canvasElem
+    );
+
+    document.getElementById('hasil').innerText =
+        "Frame berhasil diambil.";
 }
 
-function tanganiHitungKecerahan() {
-    if (!lastImageData) {
-        // Ambil frame otomatis jika belum ada gambar yang diambil
-        lastImageData = ambilFrame(videoElem, canvasElem);
+
+// ==================================================
+// 5. MENGHITUNG RATA-RATA KECERAHAN
+// ==================================================
+function rataKecerahan(imageData) {
+
+    const d = imageData.data;
+
+    let total = 0;
+
+    // Setiap pixel memiliki:
+    // R = d[i]
+    // G = d[i+1]
+    // B = d[i+2]
+    // A = d[i+3]
+
+    for (let i = 0; i < d.length; i += 4) {
+
+        total += (
+            d[i] +
+            d[i + 1] +
+            d[i + 2]
+        ) / 3;
     }
-    const kecerahan = rataKecerahan(lastImageData);
-    document.getElementById('hasil').innerText = `Kecerahan: ${kecerahan.toFixed(2)}`;
+
+    // Jumlah pixel
+    const jumlahPixel = d.length / 4;
+
+    return total / jumlahPixel;
+}
+
+
+// ==================================================
+// 6. HANDLER TOMBOL RATA KECERAHAN
+// ==================================================
+function tanganiHitungKecerahan() {
+
+    // Jika belum ada frame, ambil langsung dari kamera
+    if (!lastImageData) {
+
+        if (!cameraStream) {
+            alert("Silakan buka kamera terlebih dahulu.");
+            return;
+        }
+
+        lastImageData = ambilFrame(
+            videoElem,
+            canvasElem
+        );
+    }
+
+    // Hitung kecerahan
+    const kecerahan = rataKecerahan(
+        lastImageData
+    );
+
+    // Tampilkan hasil
+    document.getElementById('hasil').innerText =
+        `Kecerahan: ${kecerahan.toFixed(2)}`;
 }
 </script>
