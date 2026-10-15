@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kamera Canggih & Pemrosesan Gambar</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for control panel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col overflow-hidden">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0 z-20">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-tr from-indigo-500 to-violet-500 p-2 rounded-xl shadow-lg shadow-indigo-500/30">
+                <i class="fa-solid fa-camera-retro text-white text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-base md:text-lg tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Kamera Pintar & Pemrosesan</h1>
+                <p class="text-xs text-slate-400 hidden sm:block">Filter Real-time, Bokeh Simulasi & Transformasi Geometrik</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-2">
+            <button id="toggle-camera-btn" onclick="toggleCameraState()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shadow-md shadow-emerald-600/20">
+                <i class="fa-solid fa-power-off"></i>
+                <span id="cam-status-text">Kamera Nyala</span>
+            </button>
+            <button onclick="openInfoModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 transition">
+                <i class="fa-solid fa-circle-info text-sm"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+        <!-- Left / Top: Viewport & Canvas Area -->
+        <div class="flex-1 bg-slate-900/50 flex flex-col items-center justify-center p-3 sm:p-6 relative overflow-hidden">
+            
+            <!-- Notification Toast / Message Box -->
+            <div id="toast-msg" class="absolute top-4 z-30 transform -translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center space-x-2 text-sm">
+                <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400"></i>
+                <span id="toast-text">Pesan berhasil</span>
+            </div>
+
+            <!-- Video Container (Hidden original video used as processing source) -->
+            <video id="webcam" autoplay playsinline muted class="hidden"></video>
+
+            <!-- Active Output Canvas Container -->
+            <div class="relative max-w-full max-h-full flex items-center justify-center rounded-2xl overflow-hidden shadow-2xl border border-slate-800 bg-black/40 group">
+                <canvas id="output-canvas" class="max-w-full max-h-[60vh] lg:max-h-[75vh] object-contain rounded-xl transition-transform duration-200"></canvas>
+                
+                <!-- Live Badge -->
+                <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-semibold text-emerald-400 border border-emerald-500/30 flex items-center space-x-1.5 shadow-lg">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>LIVE PROCESSING</span>
+                </div>
+
+                <!-- Quick Snap Floating Button -->
+                <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 opacity-90 group-hover:opacity-100 transition">
+                    <button onclick="captureSnapshot()" class="bg-white hover:bg-slate-200 text-slate-950 font-semibold px-5 py-2.5 rounded-full shadow-2xl flex items-center space-x-2 text-sm transition transform hover:scale-105 active:scale-95">
+                        <i class="fa-solid fa-camera text-indigo-600"></i>
+                        <span>Ambil Foto</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Snapshot Gallery Drawer Trigger / Preview Carousel -->
+            <div id="gallery-preview-bar" class="mt-3 w-full max-w-xl flex items-center justify-between px-2 text-xs text-slate-400">
+                <span id="fps-counter">FPS: 0</span>
+                <span class="text-slate-500">Hasil jepretan otomatis tersimpan di sesi ini</span>
+                <button onclick="openGalleryModal()" class="hover:text-white transition flex items-center space-x-1">
+                    <i class="fa-solid fa-images text-indigo-400"></i>
+                    <span id="gallery-count">Galeri (0)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Right / Bottom: Control Panel Tabs & Sliders -->
+        <div class="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col shrink-0 z-10 shadow-2xl">
+            
+            <!-- Control Tabs Header -->
+            <div class="grid grid-cols-4 border-b border-slate-800 bg-slate-950/40 text-xs font-medium text-slate-400">
+                <button onclick="switchTab('filters')" id="tab-btn-filters" class="py-3 flex flex-col items-center justify-center space-y-1 text-indigo-400 border-b-2 border-indigo-500 bg-slate-800/40 transition">
+                    <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                    <span>Filter</span>
+                </button>
+                <button onclick="switchTab('bokeh')" id="tab-btn-bokeh" class="py-3 flex flex-col items-center justify-center space-y-1 hover:text-slate-200 transition">
+                    <i class="fa-solid fa-circle-dot text-sm"></i>
+                    <span>Bokeh</span>
+                </button>
+                <button onclick="switchTab('geo')" id="tab-btn-geo" class="py-3 flex flex-col items-center justify-center space-y-1 hover:text-slate-200 transition">
+                    <i class="fa-solid fa-crop-simple text-sm"></i>
+                    <span>Geometrik</span>
+                </button>
+                <button onclick="switchTab('adjust')" id="tab-btn-adjust" class="py-3 flex flex-col items-center justify-center space-y-1 hover:text-slate-200 transition">
+                    <i class="fa-solid fa-sliders text-sm"></i>
+                    <span>Warna</span>
+                </button>
+            </div>
+
+            <!-- Control Panels Content Area -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-5">
+                
+                <!-- TAB 1: FILTERS (Grayscale & BW) -->
+                <div id="tab-filters" class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mode Warna & Efek</h2>
+                        <button onclick="resetFilters()" class="text-xs text-indigo-400 hover:underline">Reset</button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button onclick="setFilterMode('normal')" id="btn-mode-normal" class="p-3 rounded-xl border border-indigo-500 bg-indigo-600/10 text-white font-medium text-xs text-left transition flex flex-col space-y-2">
+                            <i class="fa-solid fa-circle text-indigo-400 text-sm"></i>
+                            <span>Normal / Asli</span>
+                        </button>
+                        <button onclick="setFilterMode('grayscale')" id="btn-mode-grayscale" class="p-3 rounded-xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-300 font-medium text-xs text-left transition flex flex-col space-y-2">
+                            <i class="fa-solid fa-circle-half-stroke text-slate-400 text-sm"></i>
+                            <span>Grayscale</span>
+                        </button>
+                        <button onclick="setFilterMode('bw')" id="btn-mode-bw" class="p-3 rounded-xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-300 font-medium text-xs text-left transition flex flex-col space-y-2">
+                            <i class="fa-solid fa-circle text-slate-200 text-sm"></i>
+                            <span>Black & White</span>
+                        </button>
+                        <button onclick="setFilterMode('sepia')" id="btn-mode-sepia" class="p-3 rounded-xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-300 font-medium text-xs text-left transition flex flex-col space-y-2">
+                            <i class="fa-solid fa-palette text-amber-500 text-sm"></i>
+                            <span>Sepia Vintage</span>
+                        </button>
+                    </div>
+
+                    <!-- B&W Threshold Slider -->
+                    <div id="bw-controls" class="hidden bg-slate-800/30 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300 font-medium">Batas Threshold B&W</span>
+                            <span id="val-bw-thresh" class="text-indigo-400 font-mono">128</span>
+                        </div>
+                        <input type="range" min="30" max="220" value="128" oninput="updateParam('bwThreshold', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- TAB 2: BOKEH (Background Blur) -->
+                <div id="tab-bokeh" class="space-y-4 hidden">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Simulasi Bokeh (Blur)</h2>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggle-bokeh" onchange="toggleBokehEffect(this.checked)" class="sr-only peer">
+                            <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+
+                    <div class="bg-slate-800/30 p-3 rounded-xl border border-slate-800 text-xs text-slate-400 leading-relaxed">
+                        Membuat latar belakang subjek menjadi buram (bokeh) menggunakan pendekatan fokus tengah & mask radial otomatis.
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-300">Intensitas Blur</span>
+                                <span id="val-blur-strength" class="text-indigo-400 font-mono">10 px</span>
+                            </div>
+                            <input type="range" min="1" max="25" value="10" oninput="updateParam('blurStrength', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                        </div>
+
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-300">Ukuran Area Fokus</span>
+                                <span id="val-focus-radius" class="text-indigo-400 font-mono">35%</span>
+                            </div>
+                            <input type="range" min="15" max="70" value="35" oninput="updateParam('focusRadius', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                        </div>
+
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-300">Posisi Fokus X</span>
+                                <span id="val-focus-x" class="text-indigo-400 font-mono">50%</span>
+                            </div>
+                            <input type="range" min="10" max="90" value="50" oninput="updateParam('focusX', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                        </div>
+
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-300">Posisi Fokus Y</span>
+                                <span id="val-focus-y" class="text-indigo-400 font-mono">50%</span>
+                            </div>
+                            <input type="range" min="10" max="90" value="50" oninput="updateParam('focusY', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: GEOMETRIC TRANSFORMATIONS -->
+                <div id="tab-geo" class="space-y-4 hidden">
+                    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Transformasi Geometrik</h2>
+
+                    <!-- Mirror / Flip -->
+                    <div class="space-y-2">
+                        <span class="text-xs text-slate-300 font-medium">Pencerminan (Flip)</span>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="toggleFlip('h')" id="btn-flip-h" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-medium text-slate-300 transition flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-arrows-left-right"></i>
+                                <span>Flip Horizontal</span>
+                            </button>
+                            <button onclick="toggleFlip('v')" id="btn-flip-v" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-medium text-slate-300 transition flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-arrows-up-down"></i>
+                                <span>Flip Vertikal</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Rotation -->
+                    <div class="space-y-2">
+                        <span class="text-xs text-slate-300 font-medium">Rotasi (Derajat)</span>
+                        <div class="grid grid-cols-4 gap-2">
+                            <button onclick="setRotation(0)" id="rot-0" class="py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium transition">0°</button>
+                            <button onclick="setRotation(90)" id="rot-90" class="py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition">90°</button>
+                            <button onclick="setRotation(180)" id="rot-180" class="py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition">180°</button>
+                            <button onclick="setRotation(270)" id="rot-270" class="py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition">270°</button>
+                        </div>
+                    </div>
+
+                    <!-- Zoom / Scale -->
+                    <div class="space-y-2 pt-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300 font-medium">Zoom (Perbesaran)</span>
+                            <span id="val-zoom" class="text-indigo-400 font-mono">1.0x</span>
+                        </div>
+                        <input type="range" min="1.0" max="2.5" step="0.1" value="1.0" oninput="updateParam('zoom', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- TAB 4: COLOR ADJUSTMENTS -->
+                <div id="tab-adjust" class="space-y-4 hidden">
+                    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Koreksi Warna & Cahaya</h2>
+
+                    <div class="space-y-4">
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-300">Kecerahan (Brightness)</span>
+                                <span id="val-brightness" class="text-indigo-400 font-mono">0</span>
+                            </div>
+                            <input type="range" min="-100" max="100" value="0" oninput="updateParam('brightness', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                        </div>
+
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-300">Kontras (Contrast)</span>
+                                <span id="val-contrast" class="text-indigo-400 font-mono">0</span>
+                            </div>
+                            <input type="range" min="-100" max="100" value="0" oninput="updateParam('contrast', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                        </div>
+
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-300">Saturasi (Saturation)</span>
+                                <span id="val-saturation" class="text-indigo-400 font-mono">100%</span>
+                            </div>
+                            <input type="range" min="0" max="200" value="100" oninput="updateParam('saturation', this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- GALLERY MODAL -->
+    <div id="gallery-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-4xl max-h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-images text-indigo-400"></i>
+                    <h3 class="font-bold text-sm">Galeri Jepretan Foto</h3>
+                </div>
+                <button onclick="closeGalleryModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="gallery-grid" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                <!-- Dynamically populated captured photos -->
+            </div>
+
+            <div class="p-4 border-t border-slate-800 bg-slate-950/50 flex justify-between items-center text-xs text-slate-400">
+                <span id="gallery-info">0 foto tersimpan sesi ini</span>
+                <button onclick="clearGallery()" class="text-red-400 hover:underline">Hapus Semua</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- INFO MODAL -->
+    <div id="info-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl flex flex-col shadow-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-base text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-circle-info text-indigo-400"></i>
+                    <span>Tentang Aplikasi</span>
+                </h3>
+                <button onclick="closeInfoModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="text-xs text-slate-300 space-y-3 leading-relaxed">
+                <p>Aplikasi web pemrosesan gambar real-time berbasis HTML5 Canvas & Javascript murni (Client-Side).</p>
+                <ul class="list-disc pl-4 space-y-1.5 text-slate-400">
+                    <li><strong class="text-slate-200">Filter Grayscale & B&W:</strong> Konversi pixel tingkat keabuan dan threshold biner instan.</li>
+                    <li><strong class="text-slate-200">Simulasi Bokeh:</strong> Simulasi background blur dengan penyesuaian radius titik fokus radial.</li>
+                    <li><strong class="text-slate-200">Geometrik:</strong> Pembalikan horizontal/vertikal, rotasi sudut, dan perbesaran zoom interaktif.</li>
+                </ul>
+            </div>
+            <div class="pt-2 flex justify-end">
+                <button onclick="closeInfoModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-medium transition">Mengerti</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application JavaScript Logic -->
+    <script>
+        // State Management
+        const state = {
+            filterMode: 'normal', // 'normal', 'grayscale', 'bw', 'sepia'
+            bwThreshold: 128,
+            bokehEnabled: false,
+            blurStrength: 10,
+            focusRadius: 35, // percentage
+            focusX: 50,
+            focusY: 50,
+            flipH: false,
+            flipV: false,
+            rotation: 0, // 0, 90, 180, 270
+            zoom: 1.0,
+            brightness: 0,
+            contrast: 0,
+            saturation: 100
+        };
+
+        let videoStream = null;
+        let isCameraActive = true;
+        let capturedPhotos = [];
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fps = 0;
+
+        const videoElement = document.getElementById('webcam');
+        const outputCanvas = document.getElementById('output-canvas');
+        const ctx = outputCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Initialize Camera on load
+        window.onload = async function() {
+            await startCamera();
+            requestAnimationFrame(processFrame);
+        };
+
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                };
+                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = videoStream;
+                await videoElement.play();
+                isCameraActive = true;
+                updateCamStatusUI(true);
+                showToast("Kamera berhasil diaktifkan", "success");
+            } catch (err) {
+                console.error("Gagal mengakses kamera:", err);
+                showToast("Akses kamera ditolak atau tidak tersedia", "error");
+                isCameraActive = false;
+                updateCamStatusUI(false);
+            }
+        }
+
+        function toggleCameraState() {
+            if (isCameraActive) {
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                }
+                videoElement.srcObject = null;
+                isCameraActive = false;
+                updateCamStatusUI(false);
+                showToast("Kamera dimatikan", "info");
+            } else {
+                startCamera();
+            }
+        }
+
+        function updateCamStatusUI(active) {
+            const btn = document.getElementById('toggle-camera-btn');
+            const txt = document.getElementById('cam-status-text');
+            if (active) {
+                btn.className = "px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shadow-md shadow-emerald-600/25";
+                txt.textContent = "Kamera Nyala";
+            } else {
+                btn.className = "px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shadow-md shadow-rose-600/25";
+                txt.textContent = "Kamera Mati";
+            }
+        }
+
+        // Main Real-time Processing Loop
+        function processFrame() {
+            if (isCameraActive && videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                // Calculate FPS
+                const now = performance.now();
+                frameCount++;
+                if (now - lastTime >= 1000) {
+                    fps = Math.round((frameCount * 1000) / (now - lastTime));
+                    document.getElementById('fps-counter').textContent = `FPS: ${fps}`;
+                    frameCount = 0;
+                    lastTime = now;
+                }
+
+                let vW = videoElement.videoWidth;
+                let vH = videoElement.videoHeight;
+
+                if (outputCanvas.width !== vW || outputCanvas.height !== vH) {
+                    outputCanvas.width = vW;
+                    outputCanvas.height = vH;
+                }
+
+                // 1. Draw transformed/geometric view to canvas
+                ctx.save();
+                ctx.clearRect(0, 0, vW, vH);
+
+                // Apply Geometric Transforms (Translation, Rotation, Flip, Zoom)
+                ctx.translate(vW / 2, vH / 2);
+
+                if (state.rotation !== 0) {
+                    ctx.rotate((state.rotation * Math.PI) / 180);
+                }
+                if (state.zoom !== 1.0) {
+                    ctx.scale(state.zoom, state.zoom);
+                }
+                if (state.flipH) {
+                    ctx.scale(-1, 1);
+                }
+                if (state.flipV) {
+                    ctx.scale(1, -1);
+                }
+
+                // Draw video frame centered
+                ctx.drawImage(videoElement, -vW / 2, -vH / 2, vW, vH);
+                ctx.restore();
+
+                // 2. Pixel-level processing (Filters, Bokeh, Color adjustments)
+                let imgData = ctx.getImageData(0, 0, vW, vH);
+                let data = imgData.data;
+
+                // Pre-calculate color adjustments filters if needed
+                let hasColorAdjust = state.brightness !== 0 || state.contrast !== 0 || state.saturation !== 100;
+
+                // Handle Bokeh / Blur simulation
+                if (state.bokehEnabled) {
+                    applySimulatedBokeh(imgData, vW, vH);
+                } else {
+                    // Standard filter & color loop
+                    for (let i = 0; i < data.length; i += 4) {
+                        let r = data[i];
+                        let g = data[i+1];
+                        let b = data[i+2];
+
+                        // Filter Modes
+                        if (state.filterMode === 'grayscale') {
+                            let avg = 0.299 * r + 0.587 * g + 0.114 * b;
+                            r = g = b = avg;
+                        } else if (state.filterMode === 'bw') {
+                            let avg = 0.299 * r + 0.587 * g + 0.114 * b;
+                            r = g = b = (avg >= parseInt(state.bwThreshold)) ? 255 : 0;
+                        } else if (state.filterMode === 'sepia') {
+                            let tr = (r * 0.393) + (g * 0.769) + (b * 0.189);
+                            let tg = (r * 0.349) + (g * 0.686) + (b * 0.168);
+                            let tb = (r * 0.272) + (g * 0.534) + (b * 0.131);
+                            r = Math.min(255, tr);
+                            g = Math.min(255, tg);
+                            b = Math.min(255, tb);
+                        }
+
+                        // Color adjustments (Brightness, Contrast, Saturation)
+                        if (hasColorAdjust) {
+                            // Brightness & Contrast
+                            let cFactor = (259 * (state.contrast + 255)) / (255 * (259 - state.contrast));
+                            r = clamp(cFactor * (r - 128) + 128 + state.brightness);
+                            g = clamp(cFactor * (g - 128) + 128 + state.brightness);
+                            b = clamp(cFactor * (b - 128) + 128 + state.brightness);
+
+                            // Saturation
+                            if (state.saturation !== 100) {
+                                let sat = state.saturation / 100;
+                                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                                r = clamp(gray + sat * (r - gray));
+                                g = clamp(gray + sat * (g - gray));
+                                b = clamp(gray + sat * (b - gray));
+                            }
+                        }
+
+                        data[i] = r;
+                        data[i+1] = g;
+                        data[i+2] = b;
+                    }
+                }
+
+                ctx.putImageData(imgData, 0, 0);
+            }
+            requestAnimationFrame(processFrame);
+        }
+
+        // Simulated Bokeh with radial focus mask approximation
+        function applySimulatedBokeh(imgData, width, height) {
+            let data = imgData.data;
+            let blurR = parseInt(state.blurStrength);
+            let fRadius = (state.focusRadius / 100) * Math.min(width, height);
+            let fX = (state.focusX / 100) * width;
+            let fY = (state.focusY / 100) * height;
+
+            // Simple box blur approximation for background pixels outside focus radius
+            // To maintain 60fps, we sample or compute simplified local averages for background
+            let originalData = new Uint8ClampedArray(data);
+
+            for (let y = 0; y < height; y += 2) { // sample every 2nd row for performance
+                for (let x = 0; x < width; x += 2) {
+                    let dx = x - fX;
+                    let dy = y - fY;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist > fRadius) {
+                        // Background region: apply blur by averaging neighbor pixels
+                        let blurFactor = Math.min(1.0, (dist - fRadius) / (fRadius * 0.8));
+                        let sampleRadius = Math.floor(blurR * blurFactor);
+                        
+                        if (sampleRadius > 0) {
+                            let rSum = 0, gSum = 0, bSum = 0, count = 0;
+                            for (let ky = -sampleRadius; ky <= sampleRadius; ky += 2) {
+                                for (let kx = -sampleRadius; kx <= sampleRadius; kx += 2) {
+                                    let nx = x + kx;
+                                    let ny = y + ky;
+                                    if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                        let ni = (ny * width + nx) * 4;
+                                        rSum += originalData[ni];
+                                        gSum += originalData[ni+1];
+                                        bSum += originalData[ni+2];
+                                        count++;
+                                    }
+                                }
+                            }
+                            let idx = (y * width + x) * 4;
+                            let avgR = rSum / count;
+                            let avgG = gSum / count;
+                            let avgB = bSum / count;
+
+                            // Apply filter mode to blurred bokeh pixels as well
+                            if (state.filterMode === 'grayscale') {
+                                let avg = 0.299 * avgR + 0.587 * avgG + 0.114 * avgB;
+                                avgR = avgG = avgB = avg;
+                            }
+
+                            data[idx] = avgR;
+                            data[idx+1] = avgG;
+                            data[idx+2] = avgB;
+                        }
+                    }
+                }
+            }
+        }
+
+        function clamp(val) {
+            return Math.max(0, Math.min(255, val));
+        }
+
+        // Tab Switching Logic
+        function switchTab(tabName) {
+            const tabs = ['filters', 'bokeh', 'geo', 'adjust'];
+            tabs.forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`tab-btn-${t}`).className = "py-3 flex flex-col items-center justify-center space-y-1 hover:text-slate-200 transition text-slate-400 border-b-2 border-transparent";
+            });
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            document.getElementById(`tab-btn-${tabName}`).className = "py-3 flex flex-col items-center justify-center space-y-1 text-indigo-400 border-b-2 border-indigo-500 bg-slate-800/40 transition";
+        }
+
+        // Filter Mode Setter
+        function setFilterMode(mode) {
+            state.filterMode = mode;
+            ['normal', 'grayscale', 'bw', 'sepia'].forEach(m => {
+                const btn = document.getElementById(`btn-mode-${m}`);
+                if (btn) {
+                    if (m === mode) {
+                        btn.className = "p-3 rounded-xl border border-indigo-500 bg-indigo-600/10 text-white font-medium text-xs text-left transition flex flex-col space-y-2 shadow-sm";
+                    } else {
+                        btn.className = "p-3 rounded-xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-300 font-medium text-xs text-left transition flex flex-col space-y-2";
+                    }
+                }
+            });
+
+            // Toggle B&W threshold slider visibility
+            const bwControls = document.getElementById('bw-controls');
+            if (mode === 'bw') {
+                bwControls.classList.remove('hidden');
+            } else {
+                bwControls.classList.add('hidden');
+            }
+            showToast(`Filter diubah ke: ${mode.toUpperCase()}`, "info");
+        }
+
+        function toggleBokehEffect(enabled) {
+            state.bokehEnabled = enabled;
+            showToast(enabled ? "Simulasi Bokeh Diaktifkan" : "Bokeh Dinonaktifkan", "info");
+        }
+
+        function toggleFlip(axis) {
+            if (axis === 'h') {
+                state.flipH = !state.flipH;
+                document.getElementById('btn-flip-h').classList.toggle('bg-indigo-600', state.flipH);
+                document.getElementById('btn-flip-h').classList.toggle('text-white', state.flipH);
+            } else {
+                state.flipV = !state.flipV;
+                document.getElementById('btn-flip-v').classList.toggle('bg-indigo-600', state.flipV);
+                document.getElementById('btn-flip-v').classList.toggle('text-white', state.flipV);
+            }
+        }
+
+        function setRotation(deg) {
+            state.rotation = deg;
+            [0, 90, 180, 270].forEach(d => {
+                const btn = document.getElementById(`rot-${d}`);
+                if (d === deg) {
+                    btn.className = "py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium transition shadow-md";
+                } else {
+                    btn.className = "py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition";
+                }
+            });
+        }
+
+        // Parameter Updaters from Sliders
+        function updateParam(paramName, val) {
+            state[paramName] = parseFloat(val);
+            const spanMap = {
+                bwThreshold: 'val-bw-thresh',
+                blurStrength: 'val-blur-strength',
+                focusRadius: 'val-focus-radius',
+                focusX: 'val-focus-x',
+                focusY: 'val-focus-y',
+                zoom: 'val-zoom',
+                brightness: 'val-brightness',
+                contrast: 'val-contrast',
+                saturation: 'val-saturation'
+            };
+            if (spanMap[paramName]) {
+                let suffix = '';
+                if (paramName === 'blurStrength') suffix = ' px';
+                else if (paramName === 'focusRadius' || paramName.startsWith('focus')) suffix = '%';
+                else if (paramName === 'zoom') suffix = 'x';
+                else if (paramName === 'saturation') suffix = '%';
+                document.getElementById(spanMap[paramName]).textContent = val + suffix;
+            }
+        }
+
+        function resetFilters() {
+            setFilterMode('normal');
+            state.brightness = 0;
+            state.contrast = 0;
+            state.saturation = 100;
+            showToast("Filter direset ke default", "info");
+        }
+
+        // Snapshot & Gallery
+        function captureSnapshot() {
+            const dataUrl = outputCanvas.toDataURL('image/png');
+            capturedPhotos.unshift({
+                url: dataUrl,
+                time: new Date().toLocaleTimeString(),
+                mode: state.filterMode
+            });
+
+            document.getElementById('gallery-count').textContent = `Galeri (${capturedPhotos.length})`;
+            showToast("Foto berhasil dijepret!", "success");
+
+            // Flash effect animation
+            const flash = document.createElement('div');
+            flash.className = "absolute inset-0 bg-white z-40 pointer-events-none transition-opacity duration-300 opacity-80";
+            outputCanvas.parentElement.appendChild(flash);
+            setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 300); }, 100);
+        }
+
+        function openGalleryModal() {
+            const grid = document.getElementById('gallery-grid');
+            grid.innerHTML = '';
+            if (capturedPhotos.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-500 text-xs">Belum ada foto yang dijepret.</div>`;
+            } else {
+                capturedPhotos.forEach((photo, idx) => {
+                    const card = document.createElement('div');
+                    card.className = "bg-slate-800/60 rounded-xl overflow-hidden border border-slate-700 flex flex-col group";
+                    card.innerHTML = `
+                        <div class="relative aspect-video bg-black overflow-hidden">
+                            <img src="${photo.url}" class="w-full h-full object-cover">
+                            <div class="absolute bottom-1 right-1 bg-black/60 px-1.5 py-0.5 rounded text-[9px] text-slate-300 uppercase">${photo.mode}</div>
+                        </div>
+                        <div class="p-2.5 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-400">${photo.time}</span>
+                            <div class="flex space-x-1">
+                                <a href="${photo.url}" download="kamera-${Date.now()}.png" class="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded transition" title="Unduh"><i class="fa-solid fa-download"></i></a>
+                                <button onclick="deletePhoto(${idx})" class="p-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded transition" title="Hapus"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+            document.getElementById('gallery-info').textContent = `${capturedPhotos.length} foto tersimpan sesi ini`;
+            document.getElementById('gallery-modal').classList.remove('hidden');
+        }
+
+        function closeGalleryModal() {
+            document.getElementById('gallery-modal').classList.add('hidden');
+        }
+
+        function deletePhoto(idx) {
+            capturedPhotos.splice(idx, 1);
+            document.getElementById('gallery-count').textContent = `Galeri (${capturedPhotos.length})`;
+            openGalleryModal();
+            showToast("Foto dihapus", "info");
+        }
+
+        function clearGallery() {
+            capturedPhotos = [];
+            document.getElementById('gallery-count').textContent = `Galeri (0)`;
+            openGalleryModal();
+            showToast("Semua foto dibersihkan", "info");
+        }
+
+        function openInfoModal() {
+            document.getElementById('info-modal').classList.remove('hidden');
+        }
+
+        function closeInfoModal() {
+            document.getElementById('info-modal').classList.add('hidden');
+        }
+
+        // Toast notification helper
+        function showToast(text, type = "success") {
+            const toast = document.getElementById('toast-msg');
+            const toastText = document.getElementById('toast-text');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastText.textContent = text;
+            if (type === "success") {
+                toastIcon.className = "fa-solid fa-circle-check text-emerald-400";
+            } else if (type === "error") {
+                toastIcon.className = "fa-solid fa-circle-exclamation text-rose-400";
+            } else {
+                toastIcon.className = "fa-solid fa-circle-info text-indigo-400";
+            }
+
+            toast.classList.remove('-translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('-translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
