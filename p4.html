@@ -158,19 +158,25 @@
             <!-- Morphological Operations Section (Real-time) -->
             <div class="pt-4 border-t border-slate-800">
                 <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-project-diagram text-accent"></i> Operasi Morfologi (Real-time)
+                    <i class="fa-solid fa-project-diagram text-accent"></i> Operasi Morfologi
                 </h3>
-                <div class="grid grid-cols-2 gap-2 mb-2">
+                <div class="grid grid-cols-2 gap-2">
                     <button onclick="applyMorphology('dilation')" id="btn-dilation" class="morph-btn bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-expand"></i> Dilasi
                     </button>
                     <button onclick="applyMorphology('erosion')" id="btn-erosion" class="morph-btn bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-compress"></i> Erosi
                     </button>
+                    <button onclick="applyMorphology('opening')" id="btn-opening" class="morph-btn bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-sun"></i> Opening
+                    </button>
+                    <button onclick="applyMorphology('closing')" id="btn-closing" class="morph-btn bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-moon"></i> Closing
+                    </button>
                 </div>
             </div>
 
-            <!-- NEW: Noise Generator Section (Real-time) -->
+            <!-- Noise Generator Section (Real-time) -->
             <div class="pt-4 border-t border-slate-800">
                 <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-bolt text-accent"></i> Generator Noise (Random)
@@ -272,7 +278,7 @@
         let bokehBlur = 10;
         let gradientSens = 1.0;
         let noiseLevel = 1;
-        let morphologyType = 'none'; // 'none', 'dilation', 'erosion'
+        let morphologyType = 'none'; // 'none', 'dilation', 'erosion', 'opening', 'closing'
         let noiseIntensity = 0; // 0 - 100%
         let rotationAngle = 0;
         let flipH = false;
@@ -468,7 +474,7 @@
                 applyDenoiseFilter(imgData, width, height, parseInt(noiseLevel));
             }
 
-            // Real-time Morphology Pipeline
+            // Real-time Morphology Pipeline (Dilation, Erosion, Opening, Closing)
             if (morphologyType !== 'none') {
                 applyRealtimeMorphology(imgData, width, height, morphologyType);
             }
@@ -546,7 +552,7 @@
             }
         }
 
-        // --- CV FEATURE 3: Real-time Morphological Operations (Dilation & Erosion) ---
+        // --- CV FEATURE 3: Real-time Morphological Operations (Dilation, Erosion, Opening, Closing) ---
         function applyMorphology(type) {
             if (!currentImage && !isCameraActive) {
                 showModal("Peringatan", "Muat gambar atau aktifkan kamera terlebih dahulu.", "warning");
@@ -572,6 +578,44 @@
             }
         }
 
+        // Helper Inti Erosi
+        function performErosion(input, width, height) {
+            const output = new Uint8ClampedArray(input);
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    let idx = y * width + x;
+                    let minVal = 255;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            let nIdx = (y + dy) * width + (x + dx);
+                            if (input[nIdx] < minVal) minVal = input[nIdx];
+                        }
+                    }
+                    output[idx] = minVal;
+                }
+            }
+            return output;
+        }
+
+        // Helper Inti Dilasi
+        function performDilation(input, width, height) {
+            const output = new Uint8ClampedArray(input);
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    let idx = y * width + x;
+                    let maxVal = 0;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            let nIdx = (y + dy) * width + (x + dx);
+                            if (input[nIdx] > maxVal) maxVal = input[nIdx];
+                        }
+                    }
+                    output[idx] = maxVal;
+                }
+            }
+            return output;
+        }
+
         function applyRealtimeMorphology(imgData, width, height, type) {
             const data = imgData.data;
             const binary = new Uint8ClampedArray(width * height);
@@ -581,43 +625,33 @@
                 binary[p] = avg > 128 ? 255 : 0;
             }
 
-            const outputBinary = new Uint8ClampedArray(binary);
-            const kernelSize = 1;
+            let resultBinary;
 
-            for (let y = kernelSize; y < height - kernelSize; y++) {
-                for (let x = kernelSize; x < width - kernelSize; x++) {
-                    let idx = y * width + x;
-                    if (type === 'dilation') {
-                        let maxVal = 0;
-                        for (let dy = -kernelSize; dy <= kernelSize; dy++) {
-                            for (let dx = -kernelSize; dx <= kernelSize; dx++) {
-                                let nIdx = (y + dy) * width + (x + dx);
-                                if (binary[nIdx] > maxVal) maxVal = binary[nIdx];
-                            }
-                        }
-                        outputBinary[idx] = maxVal;
-                    } else if (type === 'erosion') {
-                        let minVal = 255;
-                        for (let dy = -kernelSize; dy <= kernelSize; dy++) {
-                            for (let dx = -kernelSize; dx <= kernelSize; dx++) {
-                                let nIdx = (y + dy) * width + (x + dx);
-                                if (binary[nIdx] < minVal) minVal = binary[nIdx];
-                            }
-                        }
-                        outputBinary[idx] = minVal;
-                    }
-                }
+            if (type === 'dilation') {
+                resultBinary = performDilation(binary, width, height);
+            } else if (type === 'erosion') {
+                resultBinary = performErosion(binary, width, height);
+            } else if (type === 'opening') {
+                // Opening = Erosi lalu Dilasi
+                let eroded = performErosion(binary, width, height);
+                resultBinary = performDilation(eroded, width, height);
+            } else if (type === 'closing') {
+                // Closing = Dilasi lalu Erosi
+                let dilated = performDilation(binary, width, height);
+                resultBinary = performErosion(dilated, width, height);
+            } else {
+                resultBinary = binary;
             }
 
             for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-                let val = outputBinary[p];
+                let val = resultBinary[p];
                 data[i] = val;
                 data[i + 1] = val;
                 data[i + 2] = val;
             }
         }
 
-        // --- NEW CV FEATURE 4: Real-time Random Noise Generator ---
+        // --- CV FEATURE 4: Real-time Random Noise Generator ---
         function updateNoiseIntensity(val) {
             noiseIntensity = parseInt(val);
             document.getElementById('noiseIntensityVal').textContent = val + '%';
@@ -628,11 +662,10 @@
 
         function applyRandomNoise(imgData, intensity) {
             const data = imgData.data;
-            const factor = intensity / 100; // 0 sampai 1
+            const factor = intensity / 100;
 
             for (let i = 0; i < data.length; i += 4) {
                 if (Math.random() < factor * 0.5) {
-                    // Berikan bintik noise acak (hitam atau putih / salt & pepper)
                     let noiseVal = Math.random() < 0.5 ? 0 : 255;
                     data[i]     = noiseVal;
                     data[i + 1] = noiseVal;
