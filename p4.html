@@ -92,7 +92,7 @@
                 <!-- Floating Quick Actions -->
                 <div class="absolute bottom-6 flex flex-wrap justify-center gap-3 bg-black/60 backdrop-blur px-4 py-2 rounded-2xl border border-white/10 shadow-2xl">
                     <button onclick="captureSnapshot()" class="bg-accent hover:bg-accentHover text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md">
-                        <i class="fa-solid fa-camera"></i> Ambil Foto
+                        <i class="fa-solid fa-camera"></i> Ambil Foto (Freeze)
                     </button>
                     <button onclick="resetAllEffects()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2">
                         <i class="fa-solid fa-rotate-left"></i> Reset Efek
@@ -138,7 +138,6 @@
                     <input type="range" id="bokehBlurRange" min="1" max="30" value="10" oninput="updateParam('bokehBlur', this.value)" class="w-full accent-accent bg-slate-700 rounded-lg h-1.5 cursor-pointer">
                 </div>
 
-                <!-- NEW: Gradient Edge Slider -->
                 <div id="gradientSliderContainer" class="hidden space-y-2 mt-3 pt-3 border-t border-slate-700/50">
                     <div class="flex justify-between text-xs text-slate-400">
                         <span>Sensitivitas Edge</span>
@@ -147,7 +146,6 @@
                     <input type="range" id="gradientSensRange" min="0.5" max="3.0" step="0.1" value="1.0" oninput="updateParam('gradientSens', this.value)" class="w-full accent-accent bg-slate-700 rounded-lg h-1.5 cursor-pointer">
                 </div>
 
-                <!-- NEW: Noise Reduction Slider -->
                 <div id="noiseSliderContainer" class="hidden space-y-2 mt-3 pt-3 border-t border-slate-700/50">
                     <div class="flex justify-between text-xs text-slate-400">
                         <span>Level Denoise (Blur)</span>
@@ -157,7 +155,7 @@
                 </div>
             </div>
 
-            <!-- NEW: Morphological Operations Section -->
+            <!-- Morphological Operations Section -->
             <div class="pt-4 border-t border-slate-800">
                 <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-project-diagram text-accent"></i> Operasi Morfologi
@@ -370,12 +368,32 @@
             processLoop();
         }
 
+        // --- Capture Snapshot (Freeze Frame) ---
         function captureSnapshot() {
             if (!isCameraActive && !currentImage) {
-                showModal("Peringatan", "Tidak ada sumber video atau gambar aktif untuk diambil.", "warning");
+                showModal("Peringatan", "Tidak ada sumber video atau gambar aktif untuk diambil fotonya.", "warning");
                 return;
             }
-            downloadImage();
+
+            if (isCameraActive) {
+                isCameraActive = false;
+                cancelAnimationFrame(animationFrameId);
+
+                const img = new Image();
+                img.src = canvas.toDataURL('image/png');
+                img.onload = function() {
+                    currentImage = img;
+                };
+
+                document.getElementById('camIcon').className = "fa-solid fa-video";
+                document.getElementById('camBtnText').textContent = "Aktifkan Kamera";
+                document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+                document.getElementById('statusText').textContent = "Foto Dijepret (Freeze) - Siap Diedit/Unduh";
+
+                showModal("Snapshot Berhasil", "Kamera dijeda dan foto berhasil diambil ke layar. Anda dapat mengeditnya atau menekan tombol 'Unduh Hasil'.", "success");
+            } else {
+                showModal("Informasi", "Gambar aktif saat ini sudah berupa foto statis.", "info");
+            }
         }
 
         // --- Core Image Processing Pipeline ---
@@ -435,18 +453,16 @@
             }
         }
 
-        // --- NEW CV FEATURE 1: Gradient Edge Detection (Sobel-based) ---
+        // --- CV FEATURE 1: Gradient Edge Detection (Sobel-based) ---
         function applyGradientEdge(imgData, width, height, sensitivity) {
             const data = imgData.data;
             const grayscale = new Float32Array(width * height);
 
-            // 1. Convert to Grayscale matrix
             for (let i = 0, p = 0; i < data.length; i += 4, p++) {
                 grayscale[p] = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
             }
 
             const copy = new Float32Array(grayscale);
-            // Sobel Kernels
             const kX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
             const kY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
 
@@ -461,20 +477,18 @@
                             pixelY += val * kY[ky + 1][kx + 1];
                         }
                     }
-                    // Gradient magnitude
                     let mag = Math.sqrt(pixelX * pixelX + pixelY * pixelY) * sensitivity;
                     mag = Math.min(255, mag);
 
                     let i = (y * width + x) * 4;
-                    // Colorful neon gradient edge effect map
-                    data[i]     = Math.min(255, mag * 1.2);       // Red channel
-                    data[i + 1] = Math.min(255, mag * 0.8 + 50);  // Green channel
-                    data[i + 2] = Math.min(255, 255 - mag);       // Blue channel
+                    data[i]     = Math.min(255, mag * 1.2);
+                    data[i + 1] = Math.min(255, mag * 0.8 + 50);
+                    data[i + 2] = Math.min(255, 255 - mag);
                 }
             }
         }
 
-        // --- NEW CV FEATURE 2: Noise Reduction (Spatial Box/Median Blur Filter) ---
+        // --- CV FEATURE 2: Noise Reduction (Box Blur Filter) ---
         function applyDenoiseFilter(imgData, width, height, level) {
             const data = imgData.data;
             const copy = new Uint8ClampedArray(data);
@@ -506,51 +520,72 @@
             }
         }
 
-        // --- NEW CV FEATURE 3: Morphological Operations (Dilation & Erosion) ---
+        // --- CV FEATURE 3: Morphological Operations (Dilation & Erosion) ---
         function applyMorphology(type) {
             if (!currentImage && !isCameraActive) {
                 showModal("Peringatan", "Muat gambar atau aktifkan kamera terlebih dahulu.", "warning");
                 return;
             }
 
+            if (isCameraActive) {
+                stopCamera();
+            }
+
             const w = canvas.width;
             const h = canvas.height;
             const imgData = ctx.getImageData(0, 0, w, h);
             const data = imgData.data;
-            const copy = new Uint8ClampedArray(data);
 
-            // Convert to binary/grayscale representation first for morphological clarity
-            for (let i = 0; i < data.length; i += 4) {
-                let avg = (data[i] + data[i+1] + data[i+2]) / 3;
-                let val = avg > 120 ? 255 : 0;
-                data[i] = val; data[i+1] = val; data[i+2] = val;
+            const binary = new Uint8ClampedArray(w * h);
+            for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+                let avg = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
+                binary[p] = avg > 128 ? 255 : 0;
             }
 
-            for (let y = 1; y < h - 1; y++) {
-                for (let x = 1; x < w - 1; x++) {
-                    let idx = (y * w + x) * 4;
-                    let targetVal = (type === 'dilation') ? 0 : 255; // Dilation expands bright/dark pixels
+            const outputBinary = new Uint8ClampedArray(binary);
+            const kernelSize = 1;
 
-                    let found = false;
-                    for (let dy = -1; dy <= 1; dy++) {
-                        for (let dx = -1; dx <= 1; dx++) {
-                            let nIdx = ((y + dy) * w + (x + dx)) * 4;
-                            if (type === 'dilation' && copy[nIdx] > 200) found = true;
-                            if (type === 'erosion' && copy[nIdx] < 50) found = true;
-                        }
-                    }
-
+            for (let y = kernelSize; y < h - kernelSize; y++) {
+                for (let x = kernelSize; x < w - kernelSize; x++) {
+                    let idx = y * w + x;
                     if (type === 'dilation') {
-                        let v = found ? 255 : 0;
-                        data[idx] = v; data[idx+1] = v; data[idx+2] = v;
-                    } else {
-                        let v = found ? 0 : 255;
-                        data[idx] = v; data[idx+1] = v; data[idx+2] = v;
+                        let maxVal = 0;
+                        for (let dy = -kernelSize; dy <= kernelSize; dy++) {
+                            for (let dx = -kernelSize; dx <= kernelSize; dx++) {
+                                let nIdx = (y + dy) * w + (x + dx);
+                                if (binary[nIdx] > maxVal) maxVal = binary[nIdx];
+                            }
+                        }
+                        outputBinary[idx] = maxVal;
+                    } else if (type === 'erosion') {
+                        let minVal = 255;
+                        for (let dy = -kernelSize; dy <= kernelSize; dy++) {
+                            for (let dx = -kernelSize; dx <= kernelSize; dx++) {
+                                let nIdx = (y + dy) * w + (x + dx);
+                                if (binary[nIdx] < minVal) minVal = binary[nIdx];
+                            }
+                        }
+                        outputBinary[idx] = minVal;
                     }
                 }
             }
+
+            for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+                let val = outputBinary[p];
+                data[i] = val;
+                data[i + 1] = val;
+                data[i + 2] = val;
+            }
+
             ctx.putImageData(imgData, 0, 0);
-            showModal("Berhasil", `Operasi morfologi ${type} diterapkan.`, "success");
+
+            const updatedImg = new Image();
+            updatedImg.src = canvas.toDataURL('image/png');
+            updatedImg.onload = function() {
+                currentImage = updatedImg;
+            };
+
+            showModal("Berhasil", `Operasi morfologi (${type === 'dilation' ? 'Dilasi' : 'Erosi'}) berhasil diterapkan!`, "success");
         }
 
         // Simulated Bokeh Effect
@@ -611,7 +646,6 @@
                 activeBtn.classList.add('bg-slate-700', 'ring-2', 'ring-accent');
             }
 
-            // Show/Hide specific sliders
             document.getElementById('bwSliderContainer').classList.toggle('hidden', filterName !== 'bw');
             document.getElementById('bokehSliderContainer').classList.toggle('hidden', filterName !== 'bokeh');
             document.getElementById('gradientSliderContainer').classList.toggle('hidden', filterName !== 'gradient_edge');
