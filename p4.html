@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam & Image Processing Studio</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0f172a',
+                        cardBg: '#1e293b',
+                        accent: '#3b82f6',
+                        accentHover: '#2563eb'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for control panels */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-darkBg text-slate-100 min-h-screen flex flex-col antialiased">
+
+    <!-- Header -->
+    <header class="bg-cardBg/80 backdrop-blur border-b border-slate-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-accent p-2.5 rounded-xl text-white shadow-lg shadow-accent/30">
+                    <i class="fa-solid fa-camera-retro text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">CamStudio Pro</h1>
+                    <p class="text-xs text-slate-400">Real-time Webcam & Image Processing Suite</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="toggleCameraBtn" onclick="toggleCamera()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-lg shadow-emerald-600/20 flex items-center gap-2">
+                    <i class="fa-solid fa-video" id="camIcon"></i> <span id="camBtnText">Aktifkan Kamera</span>
+                </button>
+                <label class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition cursor-pointer flex items-center gap-2">
+                    <i class="fa-solid fa-upload"></i> Unggah Gambar
+                    <input type="file" id="imageUpload" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                </label>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- Left 3 Columns: Viewport & Canvas Area -->
+        <section class="lg:col-span-3 flex flex-col gap-4">
+            <div class="bg-cardBg border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col items-center justify-center relative min-h-[400px] md:min-h-[550px] overflow-hidden">
+                
+                <!-- Hidden Video Element for webcam feed -->
+                <video id="webcamVideo" autoplay playsinline class="hidden"></video>
+                
+                <!-- Main Processing Canvas -->
+                <div class="relative w-full h-full flex items-center justify-center overflow-auto max-h-[70vh]">
+                    <canvas id="outputCanvas" class="max-w-full max-h-[65vh] object-contain rounded-lg shadow-2xl border border-slate-700/50 bg-black/40"></canvas>
+                </div>
+
+                <!-- Live Status Badge -->
+                <div id="statusBadge" class="absolute top-6 left-6 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full text-xs font-medium border border-white/10 flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" id="statusDot"></span>
+                    <span id="statusText">Kamera Mati / Belum Ada Gambar</span>
+                </div>
+
+                <!-- Floating Quick Actions -->
+                <div class="absolute bottom-6 flex flex-wrap justify-center gap-3 bg-black/60 backdrop-blur px-4 py-2 rounded-2xl border border-white/10 shadow-2xl">
+                    <button onclick="captureSnapshot()" class="bg-accent hover:bg-accentHover text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md">
+                        <i class="fa-solid fa-camera"></i> Ambil Foto
+                    </button>
+                    <button onclick="resetAllEffects()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2">
+                        <i class="fa-solid fa-rotate-left"></i> Reset Efek
+                    </button>
+                    <button onclick="downloadImage()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md">
+                        <i class="fa-solid fa-download"></i> Unduh Hasil
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right 1 Column: Controls Panel -->
+        <aside class="bg-cardBg border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-6 overflow-y-auto max-h-[80vh] lg:max-h-[calc(100vh-140px)]">
+            
+            <!-- Filter Section -->
+            <div>
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-accent"></i> Filter & CV Effects
+                </h3>
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <button onclick="setFilter('normal')" id="btn-normal" class="filter-btn bg-slate-700 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition active-filter">Normal</button>
+                    <button onclick="setFilter('grayscale')" id="btn-grayscale" class="filter-btn bg-slate-700/50 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition">Grayscale</button>
+                    <button onclick="setFilter('bw')" id="btn-bw" class="filter-btn bg-slate-700/50 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition">Black & White</button>
+                    <button onclick="setFilter('bokeh')" id="btn-bokeh" class="filter-btn bg-slate-700/50 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition">Bokeh Blur</button>
+                    <button onclick="setFilter('gradient_edge')" id="btn-gradient_edge" class="filter-btn bg-slate-700/50 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition">Edge Gradient</button>
+                    <button onclick="setFilter('noise_reduction')" id="btn-noise_reduction" class="filter-btn bg-slate-700/50 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition">Denoise</button>
+                </div>
+
+                <!-- Dynamic Filter Sliders -->
+                <div id="bwSliderContainer" class="hidden space-y-2 mt-3 pt-3 border-t border-slate-700/50">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>Threshold B&W</span>
+                        <span id="bwThresholdVal">128</span>
+                    </div>
+                    <input type="range" id="bwThresholdRange" min="0" max="255" value="128" oninput="updateParam('bwThreshold', this.value)" class="w-full accent-accent bg-slate-700 rounded-lg h-1.5 cursor-pointer">
+                </div>
+
+                <div id="bokehSliderContainer" class="hidden space-y-2 mt-3 pt-3 border-t border-slate-700/50">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>Intensitas Bokeh</span>
+                        <span id="bokehBlurVal">10</span>
+                    </div>
+                    <input type="range" id="bokehBlurRange" min="1" max="30" value="10" oninput="updateParam('bokehBlur', this.value)" class="w-full accent-accent bg-slate-700 rounded-lg h-1.5 cursor-pointer">
+                </div>
+
+                <!-- NEW: Gradient Edge Slider -->
+                <div id="gradientSliderContainer" class="hidden space-y-2 mt-3 pt-3 border-t border-slate-700/50">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>Sensitivitas Edge</span>
+                        <span id="gradientSensVal">1.0</span>
+                    </div>
+                    <input type="range" id="gradientSensRange" min="0.5" max="3.0" step="0.1" value="1.0" oninput="updateParam('gradientSens', this.value)" class="w-full accent-accent bg-slate-700 rounded-lg h-1.5 cursor-pointer">
+                </div>
+
+                <!-- NEW: Noise Reduction Slider -->
+                <div id="noiseSliderContainer" class="hidden space-y-2 mt-3 pt-3 border-t border-slate-700/50">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>Level Denoise (Blur)</span>
+                        <span id="noiseLevelVal">1</span>
+                    </div>
+                    <input type="range" id="noiseLevelRange" min="1" max="5" step="1" value="1" oninput="updateParam('noiseLevel', this.value)" class="w-full accent-accent bg-slate-700 rounded-lg h-1.5 cursor-pointer">
+                </div>
+            </div>
+
+            <!-- NEW: Morphological Operations Section -->
+            <div class="pt-4 border-t border-slate-800">
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-project-diagram text-accent"></i> Operasi Morfologi
+                </h3>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button onclick="applyMorphology('dilation')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-expand"></i> Dilasi (Pertebal)
+                    </button>
+                    <button onclick="applyMorphology('erosion')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-compress"></i> Erosi (Perhalus)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Geometric Transformations -->
+            <div class="pt-4 border-t border-slate-800">
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-shapes text-accent"></i> Transformasi Geometrik
+                </h3>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button onclick="rotateImage(90)" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-rotate-right"></i> Putar 90°
+                    </button>
+                    <button onclick="rotateImage(180)" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-arrows-rotate"></i> Putar 180°
+                    </button>
+                    <button onclick="flipImage('h')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-arrows-left-right"></i> Flip Horisontal
+                    </button>
+                    <button onclick="flipImage('v')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-arrows-up-down"></i> Flip Vertikal
+                    </button>
+                </div>
+            </div>
+
+            <!-- Resize Section -->
+            <div class="pt-4 border-t border-slate-800">
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-expand text-accent"></i> Ubah Ukuran (Resize)
+                </h3>
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Lebar (px)</label>
+                            <input type="number" id="resizeWidth" oninput="onWidthChange()" class="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-accent">
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Tinggi (px)</label>
+                            <input type="number" id="resizeHeight" oninput="onHeightChange()" class="w-full bg-slate-700 border border-slate-600 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-accent">
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs text-slate-300 flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="lockAspectRatio" checked class="rounded bg-slate-700 border-slate-600 text-accent focus:ring-0"> Kunci Aspek Rasio
+                        </label>
+                        <button onclick="applyResize()" class="bg-accent hover:bg-accentHover text-white px-3 py-1.5 rounded-xl text-xs font-medium transition">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Crop Section -->
+            <div class="pt-4 border-t border-slate-800">
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-crop text-accent"></i> Pangkas (Crop)
+                </h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="applyPresetCrop('square')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition">Kotak (1:1)</button>
+                    <button onclick="applyPresetCrop('landscape')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition">Lanskap (16:9)</button>
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <!-- Custom Modal for Notifications -->
+    <div id="notificationModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-slate-700 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+            <div id="modalIcon" class="w-12 h-12 rounded-full bg-accent/20 text-accent flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-circle-info"></i>
+            </div>
+            <h4 id="modalTitle" class="text-lg font-bold">Informasi</h4>
+            <p id="modalMessage" class="text-sm text-slate-300">Pesan notifikasi...</p>
+            <button onclick="closeModal()" class="w-full bg-accent hover:bg-accentHover text-white py-2.5 rounded-xl text-sm font-medium transition">Tutup</button>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        const video = document.getElementById('webcamVideo');
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let isCameraActive = false;
+        let animationFrameId = null;
+        let currentImage = null;
+
+        // Processing parameters state
+        let currentFilter = 'normal';
+        let bwThreshold = 128;
+        let bokehBlur = 10;
+        let gradientSens = 1.0;
+        let noiseLevel = 1;
+        let rotationAngle = 0;
+        let flipH = false;
+        let flipV = false;
+        let originalAspectRatio = 1;
+
+        window.onload = function() {
+            drawPlaceholder();
+        };
+
+        function drawPlaceholder() {
+            canvas.width = 640;
+            canvas.height = 480;
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#64748b';
+            ctx.font = '16px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Aktifkan Kamera atau Unggah Gambar untuk Memulai', canvas.width / 2, canvas.height / 2);
+        }
+
+        // --- Camera Handling ---
+        async function toggleCamera() {
+            if (!isCameraActive) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
+                    video.srcObject = stream;
+                    await video.play();
+                    isCameraActive = true;
+                    currentImage = null;
+
+                    document.getElementById('camIcon').className = "fa-solid fa-video-slash";
+                    document.getElementById('camBtnText').textContent = "Matikan Kamera";
+                    document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+                    document.getElementById('statusText').textContent = "Kamera Aktif (Live)";
+
+                    startRealtimeProcessing();
+                } catch (err) {
+                    showModal("Gagal Mengakses Kamera", "Pastikan izin kamera diizinkan pada browser Anda.", "error");
+                }
+            } else {
+                stopCamera();
+            }
+        }
+
+        function stopCamera() {
+            if (video.srcObject) {
+                let tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            isCameraActive = false;
+            cancelAnimationFrame(animationFrameId);
+
+            document.getElementById('camIcon').className = "fa-solid fa-video";
+            document.getElementById('camBtnText').textContent = "Aktifkan Kamera";
+            document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+            document.getElementById('statusText').textContent = "Kamera Mati";
+
+            drawPlaceholder();
+        }
+
+        // --- Image Upload Handling ---
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                if (isCameraActive) stopCamera();
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        currentImage = img;
+                        rotationAngle = 0;
+                        flipH = false;
+                        flipV = false;
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        originalAspectRatio = img.width / img.height;
+                        
+                        document.getElementById('resizeWidth').value = img.width;
+                        document.getElementById('resizeHeight').value = img.height;
+
+                        processAndDrawImage(img);
+                        document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+                        document.getElementById('statusText').textContent = `Gambar Dimuat (${img.width}x${img.height}px)`;
+                    }
+                    img.src = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // --- Real-time Loop for Camera ---
+        function startRealtimeProcessing() {
+            function processLoop() {
+                if (!isCameraActive) return;
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        originalAspectRatio = canvas.width / canvas.height;
+                        document.getElementById('resizeWidth').value = canvas.width;
+                        document.getElementById('resizeHeight').value = canvas.height;
+                    }
+                    processAndDrawImage(video);
+                }
+                animationFrameId = requestAnimationFrame(processLoop);
+            }
+            processLoop();
+        }
+
+        function captureSnapshot() {
+            if (!isCameraActive && !currentImage) {
+                showModal("Peringatan", "Tidak ada sumber video atau gambar aktif untuk diambil.", "warning");
+                return;
+            }
+            downloadImage();
+        }
+
+        // --- Core Image Processing Pipeline ---
+        function processAndDrawImage(source) {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+
+            let w = source.videoWidth || source.width;
+            let h = source.videoHeight || source.height;
+
+            if (rotationAngle === 90 || rotationAngle === 270) {
+                tempCanvas.width = h;
+                tempCanvas.height = w;
+            } else {
+                tempCanvas.width = w;
+                tempCanvas.height = h;
+            }
+
+            tempCtx.save();
+            tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+            tempCtx.rotate((rotationAngle * Math.PI) / 180);
+            tempCtx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+            tempCtx.drawImage(source, -w / 2, -h / 2, w, h);
+            tempCtx.restore();
+
+            const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            applySelectedFilter(imgData, tempCanvas.width, tempCanvas.height);
+            tempCtx.putImageData(imgData, 0, 0);
+
+            canvas.width = tempCanvas.width;
+            canvas.height = tempCanvas.height;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(tempCanvas, 0, 0);
+        }
+
+        function applySelectedFilter(imgData, width, height) {
+            const data = imgData.data;
+            const len = data.length;
+
+            if (currentFilter === 'grayscale') {
+                for (let i = 0; i < len; i += 4) {
+                    let avg = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
+                    data[i] = avg; data[i + 1] = avg; data[i + 2] = avg;
+                }
+            } else if (currentFilter === 'bw') {
+                for (let i = 0; i < len; i += 4) {
+                    let avg = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
+                    let val = avg >= parseInt(bwThreshold) ? 255 : 0;
+                    data[i] = val; data[i + 1] = val; data[i + 2] = val;
+                }
+            } else if (currentFilter === 'bokeh') {
+                applyRadialBokeh(imgData, width, height, parseInt(bokehBlur));
+            } else if (currentFilter === 'gradient_edge') {
+                applyGradientEdge(imgData, width, height, parseFloat(gradientSens));
+            } else if (currentFilter === 'noise_reduction') {
+                applyDenoiseFilter(imgData, width, height, parseInt(noiseLevel));
+            }
+        }
+
+        // --- NEW CV FEATURE 1: Gradient Edge Detection (Sobel-based) ---
+        function applyGradientEdge(imgData, width, height, sensitivity) {
+            const data = imgData.data;
+            const grayscale = new Float32Array(width * height);
+
+            // 1. Convert to Grayscale matrix
+            for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+                grayscale[p] = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
+            }
+
+            const copy = new Float32Array(grayscale);
+            // Sobel Kernels
+            const kX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
+            const kY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
+
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    let pixelX = 0, pixelY = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            let idx = (y + ky) * width + (x + kx);
+                            let val = copy[idx];
+                            pixelX += val * kX[ky + 1][kx + 1];
+                            pixelY += val * kY[ky + 1][kx + 1];
+                        }
+                    }
+                    // Gradient magnitude
+                    let mag = Math.sqrt(pixelX * pixelX + pixelY * pixelY) * sensitivity;
+                    mag = Math.min(255, mag);
+
+                    let i = (y * width + x) * 4;
+                    // Colorful neon gradient edge effect map
+                    data[i]     = Math.min(255, mag * 1.2);       // Red channel
+                    data[i + 1] = Math.min(255, mag * 0.8 + 50);  // Green channel
+                    data[i + 2] = Math.min(255, 255 - mag);       // Blue channel
+                }
+            }
+        }
+
+        // --- NEW CV FEATURE 2: Noise Reduction (Spatial Box/Median Blur Filter) ---
+        function applyDenoiseFilter(imgData, width, height, level) {
+            const data = imgData.data;
+            const copy = new Uint8ClampedArray(data);
+            const radius = level;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        let ny = y + dy;
+                        if (ny >= 0 && ny < height) {
+                            for (let dx = -radius; dx <= radius; dx++) {
+                                let nx = x + dx;
+                                if (nx >= 0 && nx < width) {
+                                    let idx = (ny * width + nx) * 4;
+                                    rSum += copy[idx];
+                                    gSum += copy[idx + 1];
+                                    bSum += copy[idx + 2];
+                                    count++;
+                                }
+                            }
+                        }
+                    }
+                    let i = (y * width + x) * 4;
+                    data[i]     = rSum / count;
+                    data[i + 1] = gSum / count;
+                    data[i + 2] = bSum / count;
+                }
+            }
+        }
+
+        // --- NEW CV FEATURE 3: Morphological Operations (Dilation & Erosion) ---
+        function applyMorphology(type) {
+            if (!currentImage && !isCameraActive) {
+                showModal("Peringatan", "Muat gambar atau aktifkan kamera terlebih dahulu.", "warning");
+                return;
+            }
+
+            const w = canvas.width;
+            const h = canvas.height;
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const data = imgData.data;
+            const copy = new Uint8ClampedArray(data);
+
+            // Convert to binary/grayscale representation first for morphological clarity
+            for (let i = 0; i < data.length; i += 4) {
+                let avg = (data[i] + data[i+1] + data[i+2]) / 3;
+                let val = avg > 120 ? 255 : 0;
+                data[i] = val; data[i+1] = val; data[i+2] = val;
+            }
+
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
+                    let idx = (y * w + x) * 4;
+                    let targetVal = (type === 'dilation') ? 0 : 255; // Dilation expands bright/dark pixels
+
+                    let found = false;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            let nIdx = ((y + dy) * w + (x + dx)) * 4;
+                            if (type === 'dilation' && copy[nIdx] > 200) found = true;
+                            if (type === 'erosion' && copy[nIdx] < 50) found = true;
+                        }
+                    }
+
+                    if (type === 'dilation') {
+                        let v = found ? 255 : 0;
+                        data[idx] = v; data[idx+1] = v; data[idx+2] = v;
+                    } else {
+                        let v = found ? 0 : 255;
+                        data[idx] = v; data[idx+1] = v; data[idx+2] = v;
+                    }
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+            showModal("Berhasil", `Operasi morfologi ${type} diterapkan.`, "success");
+        }
+
+        // Simulated Bokeh Effect
+        function applyRadialBokeh(imgData, width, height, blurRadius) {
+            const data = imgData.data;
+            const copy = new Uint8ClampedArray(data);
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const distX = x - centerX;
+                    const distY = y - centerY;
+                    const dist = Math.sqrt(distX * distX + distY * distY);
+                    const factor = dist / maxDist;
+
+                    if (factor > 0.35) {
+                        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+                        let dynamicBlur = Math.floor(blurRadius * factor);
+                        
+                        for (let dy = -dynamicBlur; dy <= dynamicBlur; dy += 2) {
+                            let ny = y + dy;
+                            if (ny >= 0 && ny < height) {
+                                for (let dx = -dynamicBlur; dx <= dynamicBlur; dx += 2) {
+                                    let nx = x + dx;
+                                    if (nx >= 0 && nx < width) {
+                                        let nIdx = (ny * width + nx) * 4;
+                                        rSum += copy[nIdx];
+                                        gSum += copy[nIdx + 1];
+                                        bSum += copy[nIdx + 2];
+                                        count++;
+                                    }
+                                }
+                            }
+                        }
+                        if (count > 0) {
+                            data[idx] = rSum / count;
+                            data[idx + 1] = gSum / count;
+                            data[idx + 2] = bSum / count;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Filter & UI Controls ---
+        function setFilter(filterName) {
+            currentFilter = filterName;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-slate-700', 'active-filter', 'ring-2', 'ring-accent');
+                btn.classList.add('bg-slate-700/50');
+            });
+            const activeBtn = document.getElementById(`btn-${filterName}`);
+            if(activeBtn) {
+                activeBtn.classList.remove('bg-slate-700/50');
+                activeBtn.classList.add('bg-slate-700', 'ring-2', 'ring-accent');
+            }
+
+            // Show/Hide specific sliders
+            document.getElementById('bwSliderContainer').classList.toggle('hidden', filterName !== 'bw');
+            document.getElementById('bokehSliderContainer').classList.toggle('hidden', filterName !== 'bokeh');
+            document.getElementById('gradientSliderContainer').classList.toggle('hidden', filterName !== 'gradient_edge');
+            document.getElementById('noiseSliderContainer').classList.toggle('hidden', filterName !== 'noise_reduction');
+
+            if (!isCameraActive && currentImage) {
+                processAndDrawImage(currentImage);
+            }
+        }
+
+        function updateParam(param, val) {
+            if (param === 'bwThreshold') {
+                bwThreshold = val;
+                document.getElementById('bwThresholdVal').textContent = val;
+            } else if (param === 'bokehBlur') {
+                bokehBlur = val;
+                document.getElementById('bokehBlurVal').textContent = val;
+            } else if (param === 'gradientSens') {
+                gradientSens = val;
+                document.getElementById('gradientSensVal').textContent = val;
+            } else if (param === 'noiseLevel') {
+                noiseLevel = val;
+                document.getElementById('noiseLevelVal').textContent = val;
+            }
+            if (!isCameraActive && currentImage) {
+                processAndDrawImage(currentImage);
+            }
+        }
+
+        function rotateImage(angle) {
+            rotationAngle = (rotationAngle + angle) % 360;
+            if (!isCameraActive && currentImage) {
+                processAndDrawImage(currentImage);
+            }
+        }
+
+        function flipImage(dir) {
+            if (dir === 'h') flipH = !flipH;
+            if (dir === 'v') flipV = !flipV;
+            if (!isCameraActive && currentImage) {
+                processAndDrawImage(currentImage);
+            }
+        }
+
+        function onWidthChange() {
+            if (document.getElementById('lockAspectRatio').checked) {
+                const w = parseInt(document.getElementById('resizeWidth').value);
+                if (!isNaN(w) && originalAspectRatio) {
+                    document.getElementById('resizeHeight').value = Math.round(w / originalAspectRatio);
+                }
+            }
+        }
+
+        function onHeightChange() {
+            if (document.getElementById('lockAspectRatio').checked) {
+                const h = parseInt(document.getElementById('resizeHeight').value);
+                if (!isNaN(h) && originalAspectRatio) {
+                    document.getElementById('resizeWidth').value = Math.round(h * originalAspectRatio);
+                }
+            }
+        }
+
+        function applyResize() {
+            const targetW = parseInt(document.getElementById('resizeWidth').value);
+            const targetH = parseInt(document.getElementById('resizeHeight').value);
+
+            if (!targetW || !targetH) {
+                showModal("Peringatan", "Masukkan ukuran lebar dan tinggi yang valid.", "warning");
+                return;
+            }
+
+            const resCanvas = document.createElement('canvas');
+            resCanvas.width = targetW;
+            resCanvas.height = targetH;
+            const resCtx = resCanvas.getContext('2d');
+            resCtx.drawImage(canvas, 0, 0, targetW, targetH);
+
+            canvas.width = targetW;
+            canvas.height = targetH;
+            ctx.clearRect(0, 0, targetW, targetH);
+            ctx.drawImage(resCanvas, 0, 0);
+            showModal("Berhasil", `Ukuran berhasil diubah ke ${targetW}x${targetH}px`, "success");
+        }
+
+        function applyPresetCrop(type) {
+            let curW = canvas.width;
+            let curH = canvas.height;
+            let newW = curW, newH = curH, offsetX = 0, offsetY = 0;
+
+            if (type === 'square') {
+                let size = Math.min(curW, curH);
+                newW = size; newH = size;
+                offsetX = (curW - size) / 2;
+                offsetY = (curH - size) / 2;
+            } else if (type === 'landscape') {
+                if (curW / curH > 16/9) {
+                    newH = curH;
+                    newW = curH * (16/9);
+                    offsetX = (curW - newW) / 2;
+                } else {
+                    newW = curW;
+                    newH = curW * (9/16);
+                    offsetY = (curH - newH) / 2;
+                }
+            }
+
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = newW;
+            cropCanvas.height = newH;
+            const cropCtx = cropCanvas.getContext('2d');
+            cropCtx.drawImage(canvas, offsetX, offsetY, newW, newH, 0, 0, newW, newH);
+
+            canvas.width = newW;
+            canvas.height = newH;
+            ctx.clearRect(0, 0, newW, newH);
+            ctx.drawImage(cropCanvas, 0, 0);
+            showModal("Berhasil", "Gambar berhasil dipangkas.", "success");
+        }
+
+        function resetAllEffects() {
+            currentFilter = 'normal';
+            rotationAngle = 0;
+            flipH = false;
+            flipV = false;
+            setFilter('normal');
+            if (currentImage) {
+                canvas.width = currentImage.width;
+                canvas.height = currentImage.height;
+                processAndDrawImage(currentImage);
+            } else if (!isCameraActive) {
+                drawPlaceholder();
+            }
+            showModal("Reset", "Semua efek dan transformasi telah dikembalikan.", "info");
+        }
+
+        function downloadImage() {
+            const link = document.createElement('a');
+            link.download = `processed-image-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function showModal(title, message, type = "info") {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('notificationModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('notificationModal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
