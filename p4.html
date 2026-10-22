@@ -155,18 +155,32 @@
                 </div>
             </div>
 
-            <!-- Morphological Operations Section -->
+            <!-- Morphological Operations Section (Real-time) -->
             <div class="pt-4 border-t border-slate-800">
                 <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-project-diagram text-accent"></i> Operasi Morfologi
+                    <i class="fa-solid fa-project-diagram text-accent"></i> Operasi Morfologi (Real-time)
                 </h3>
                 <div class="grid grid-cols-2 gap-2 mb-2">
-                    <button onclick="applyMorphology('dilation')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-expand"></i> Dilasi (Pertebal)
+                    <button onclick="applyMorphology('dilation')" id="btn-dilation" class="morph-btn bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-expand"></i> Dilasi
                     </button>
-                    <button onclick="applyMorphology('erosion')" class="bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-compress"></i> Erosi (Perhalus)
+                    <button onclick="applyMorphology('erosion')" id="btn-erosion" class="morph-btn bg-slate-700/60 hover:bg-slate-600 text-white py-2 px-3 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-compress"></i> Erosi
                     </button>
+                </div>
+            </div>
+
+            <!-- NEW: Noise Generator Section (Real-time) -->
+            <div class="pt-4 border-t border-slate-800">
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-bolt text-accent"></i> Generator Noise (Random)
+                </h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>Intensitas Noise</span>
+                        <span id="noiseIntensityVal">0%</span>
+                    </div>
+                    <input type="range" id="noiseIntensityRange" min="0" max="100" value="0" oninput="updateNoiseIntensity(this.value)" class="w-full accent-accent bg-slate-700 rounded-lg h-1.5 cursor-pointer">
                 </div>
             </div>
 
@@ -258,6 +272,8 @@
         let bokehBlur = 10;
         let gradientSens = 1.0;
         let noiseLevel = 1;
+        let morphologyType = 'none'; // 'none', 'dilation', 'erosion'
+        let noiseIntensity = 0; // 0 - 100%
         let rotationAngle = 0;
         let flipH = false;
         let flipV = false;
@@ -451,6 +467,16 @@
             } else if (currentFilter === 'noise_reduction') {
                 applyDenoiseFilter(imgData, width, height, parseInt(noiseLevel));
             }
+
+            // Real-time Morphology Pipeline
+            if (morphologyType !== 'none') {
+                applyRealtimeMorphology(imgData, width, height, morphologyType);
+            }
+
+            // Real-time Random Noise Generator Pipeline
+            if (noiseIntensity > 0) {
+                applyRandomNoise(imgData, noiseIntensity);
+            }
         }
 
         // --- CV FEATURE 1: Gradient Edge Detection (Sobel-based) ---
@@ -520,23 +546,36 @@
             }
         }
 
-        // --- CV FEATURE 3: Morphological Operations (Dilation & Erosion) ---
+        // --- CV FEATURE 3: Real-time Morphological Operations (Dilation & Erosion) ---
         function applyMorphology(type) {
             if (!currentImage && !isCameraActive) {
                 showModal("Peringatan", "Muat gambar atau aktifkan kamera terlebih dahulu.", "warning");
                 return;
             }
 
-            if (isCameraActive) {
-                stopCamera();
+            if (morphologyType === type) {
+                morphologyType = 'none';
+                document.getElementById(`btn-${type}`).classList.remove('bg-accent', 'ring-2', 'ring-white');
+                document.getElementById(`btn-${type}`).classList.add('bg-slate-700/60');
+            } else {
+                morphologyType = type;
+                document.querySelectorAll('.morph-btn').forEach(b => {
+                    b.classList.remove('bg-accent', 'ring-2', 'ring-white');
+                    b.classList.add('bg-slate-700/60');
+                });
+                document.getElementById(`btn-${type}`).classList.remove('bg-slate-700/60');
+                document.getElementById(`btn-${type}`).classList.add('bg-accent', 'ring-2', 'ring-white');
             }
 
-            const w = canvas.width;
-            const h = canvas.height;
-            const imgData = ctx.getImageData(0, 0, w, h);
-            const data = imgData.data;
+            if (!isCameraActive && currentImage) {
+                processAndDrawImage(currentImage);
+            }
+        }
 
-            const binary = new Uint8ClampedArray(w * h);
+        function applyRealtimeMorphology(imgData, width, height, type) {
+            const data = imgData.data;
+            const binary = new Uint8ClampedArray(width * height);
+
             for (let i = 0, p = 0; i < data.length; i += 4, p++) {
                 let avg = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
                 binary[p] = avg > 128 ? 255 : 0;
@@ -545,14 +584,14 @@
             const outputBinary = new Uint8ClampedArray(binary);
             const kernelSize = 1;
 
-            for (let y = kernelSize; y < h - kernelSize; y++) {
-                for (let x = kernelSize; x < w - kernelSize; x++) {
-                    let idx = y * w + x;
+            for (let y = kernelSize; y < height - kernelSize; y++) {
+                for (let x = kernelSize; x < width - kernelSize; x++) {
+                    let idx = y * width + x;
                     if (type === 'dilation') {
                         let maxVal = 0;
                         for (let dy = -kernelSize; dy <= kernelSize; dy++) {
                             for (let dx = -kernelSize; dx <= kernelSize; dx++) {
-                                let nIdx = (y + dy) * w + (x + dx);
+                                let nIdx = (y + dy) * width + (x + dx);
                                 if (binary[nIdx] > maxVal) maxVal = binary[nIdx];
                             }
                         }
@@ -561,7 +600,7 @@
                         let minVal = 255;
                         for (let dy = -kernelSize; dy <= kernelSize; dy++) {
                             for (let dx = -kernelSize; dx <= kernelSize; dx++) {
-                                let nIdx = (y + dy) * w + (x + dx);
+                                let nIdx = (y + dy) * width + (x + dx);
                                 if (binary[nIdx] < minVal) minVal = binary[nIdx];
                             }
                         }
@@ -576,16 +615,30 @@
                 data[i + 1] = val;
                 data[i + 2] = val;
             }
+        }
 
-            ctx.putImageData(imgData, 0, 0);
+        // --- NEW CV FEATURE 4: Real-time Random Noise Generator ---
+        function updateNoiseIntensity(val) {
+            noiseIntensity = parseInt(val);
+            document.getElementById('noiseIntensityVal').textContent = val + '%';
+            if (!isCameraActive && currentImage) {
+                processAndDrawImage(currentImage);
+            }
+        }
 
-            const updatedImg = new Image();
-            updatedImg.src = canvas.toDataURL('image/png');
-            updatedImg.onload = function() {
-                currentImage = updatedImg;
-            };
+        function applyRandomNoise(imgData, intensity) {
+            const data = imgData.data;
+            const factor = intensity / 100; // 0 sampai 1
 
-            showModal("Berhasil", `Operasi morfologi (${type === 'dilation' ? 'Dilasi' : 'Erosi'}) berhasil diterapkan!`, "success");
+            for (let i = 0; i < data.length; i += 4) {
+                if (Math.random() < factor * 0.5) {
+                    // Berikan bintik noise acak (hitam atau putih / salt & pepper)
+                    let noiseVal = Math.random() < 0.5 ? 0 : 255;
+                    data[i]     = noiseVal;
+                    data[i + 1] = noiseVal;
+                    data[i + 2] = noiseVal;
+                }
+            }
         }
 
         // Simulated Bokeh Effect
@@ -767,10 +820,18 @@
 
         function resetAllEffects() {
             currentFilter = 'normal';
+            morphologyType = 'none';
+            noiseIntensity = 0;
+            document.getElementById('noiseIntensityRange').value = 0;
+            document.getElementById('noiseIntensityVal').textContent = '0%';
             rotationAngle = 0;
             flipH = false;
             flipV = false;
             setFilter('normal');
+            document.querySelectorAll('.morph-btn').forEach(b => {
+                b.classList.remove('bg-accent', 'ring-2', 'ring-white');
+                b.classList.add('bg-slate-700/60');
+            });
             if (currentImage) {
                 canvas.width = currentImage.width;
                 canvas.height = currentImage.height;
