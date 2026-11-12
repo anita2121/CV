@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe Face Mesh 468 Titik - Realtime</title>
+    <!-- Memuat Library MediaPipe Face Mesh & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 10px; }
+        .container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        video, canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1); /* Efek cermin */
+        }
+        .status-panel {
+            margin-top: 15px;
+            background: #1e1e1e;
+            padding: 10px 20px;
+            border-radius: 8px;
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Deteksi 468 Titik Wajah (MediaPipe Face Mesh)</h1>
+    <div class="container">
+        <video class="input_video" autoplay playsinline></video>
+        <canvas class="output_canvas" width="640" height="480"></canvas>
+    </div>
+
+    <div class="status-panel">
+        <div>Status Wajah: <strong id="faceStatus" style="color: #ff5252;">Mencari Wajah...</strong></div>
+        <div>Jumlah Titik: <strong>468 Titik Aktif</strong></div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        const canvasElement = document.getElementsByClassName('output_canvas')[0];
+        const canvasCtx = canvasElement.getContext('2d');
+        const faceStatus = document.getElementById('faceStatus');
+
+        function onResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Gambar tangkapan video kamera di canvas
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                faceStatus.innerText = "Wajah Terdeteksi";
+                faceStatus.style.color = "#69f0ae";
+
+                for (const landmarks of results.multiFaceLandmarks) {
+                    // 1. Menggambar kontur mata, bibir, dan wajah secara otomatis
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C070', lineWidth: 0.5});
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, {color: '#00FF00', lineWidth: 1});
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, {color: '#00FF00', lineWidth: 1});
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_LIPS, {color: '#FF3366', lineWidth: 1});
+                    
+                    // Contoh mengambil koordinat titik spesifik (Misal: Ujung Hidung / Indeks 1)
+                    const noseTip = landmarks[1];
+                    // console.log("Posisi Hidung X:", noseTip.x, "Y:", noseTip.y, "Z:", noseTip.z);
+                }
+            } else {
+                faceStatus.innerText = "Wajah Tidak Ditemukan";
+                faceStatus.style.color = "#ff5252";
+            }
+            canvasCtx.restore();
+        }
+
+        const faceMesh = new FaceMesh({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+            }
+        });
+
+        faceMesh.setOptions({
+            maxNumFaces: 1,
+            refineLandmarks: true, // Menambahkan 10 titik iris (total 478 titik)
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        faceMesh.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await faceMesh.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+
+        camera.start();
+    </script>
+</body>
+</html>
