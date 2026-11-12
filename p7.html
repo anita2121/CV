@@ -402,6 +402,82 @@
     <script>
         /**
          * ============================================================================
+         * 1. LAYER DATABASE LOKAL (IndexedDB: FaceAttendanceDB)
+         * ============================================================================
+         */
+        const DB_NAME = 'FaceAttendanceDB';
+        const DB_VERSION = 1;
+        let dbInstance = null;
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('users')) {
+                        const userStore = db.createObjectStore('users', { keyPath: 'id', autoIncrement: true });
+                        userStore.createIndex('nik', 'nik', { unique: true });
+                    }
+                    if (!db.objectStoreNames.contains('attendance_logs')) {
+                        const logStore = db.createObjectStore('attendance_logs', { keyPath: 'id', autoIncrement: true });
+                        logStore.createIndex('dateStr', 'dateStr', { unique: false });
+                    }
+                };
+
+                request.onsuccess = (event) => {
+                    dbInstance = event.target.result;
+                    resolve(dbInstance);
+                };
+
+                request.onerror = (event) => {
+                    reject(event.target.error);
+                };
+            });
+        }
+
+        function dbGetAll(storeName) {
+            return new Promise((resolve, reject) => {
+                const tx = dbInstance.transaction(storeName, 'readonly');
+                const store = tx.objectStore(storeName);
+                const req = store.getAll();
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        function dbAdd(storeName, data) {
+            return new Promise((resolve, reject) => {
+                const tx = dbInstance.transaction(storeName, 'readwrite');
+                const store = tx.objectStore(storeName);
+                const req = store.add(data);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        function dbDelete(storeName, id) {
+            return new Promise((resolve, reject) => {
+                const tx = dbInstance.transaction(storeName, 'readwrite');
+                const store = tx.objectStore(storeName);
+                const req = store.delete(id);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        function dbClear(storeName) {
+            return new Promise((resolve, reject) => {
+                const tx = dbInstance.transaction(storeName, 'readwrite');
+                const store = tx.objectStore(storeName);
+                const req = store.clear();
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        /**
+         * ============================================================================
          * 2. EKSTRAKSI FITUR GEOMETRI 468 TITIK
          * ============================================================================
          */
@@ -1084,6 +1160,21 @@
                     showToast('Registrasi Berhasil', `Wajah ${name} (${nik}) berhasil disimpan ke IndexedDB.`, 'success');
                     e.target.reset();
                     await refreshAllData();
+                } catch (err) {
+                    console.error('Gagal menyimpan pengguna:', err);
+                    playBeep('error');
+                    showToast('Gagal Registrasi', 'Terjadi kesalahan saat menyimpan data wajah ke IndexedDB.', 'error');
+                }
+            });
+
+            // Filter Pencarian Pengguna & Tanggal Riwayat
+            document.getElementById('searchUserInput').addEventListener('input', renderUsersGrid);
+            document.getElementById('filterDateInput').addEventListener('change', renderLogsTable);
+            document.getElementById('clearDateFilterBtn').addEventListener('click', () => {
+                document.getElementById('filterDateInput').value = '';
+                renderLogsTable();
+            });
+
             // Export & Reset Log / Database
             document.getElementById('exportCsvBtn').addEventListener('click', exportLogsToCSV);
             document.getElementById('resetLogsBtn').addEventListener('click', async () => {
