@@ -238,14 +238,15 @@ for (let i = 0; i < 7; i++) {
         ? -Math.sign(val) * Math.log10(Math.abs(val))
         : 0;
     }
-        
+        }
 
         // Bersihkan memori OpenCV (Wajib untuk mencegah memory leak)
         src.delete(); rgb.delete(); gray.delete(); channels.delete();
         mask.delete(); binary.delete(); contours.delete(); hierarchy.delete();
 
         return { histVec, huVec, bentukInfo };
-    }
+    }    
+    
 
     /**
      * MODUL VERIFIKASI (vision-core/verify)
