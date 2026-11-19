@@ -688,84 +688,25 @@
                         ? (rect.width / rect.height).toFixed(2)
                         : "0"
                 };
+// Momen kontur
+let momen = cv.moments(konturUtama, false);
 
-                // Momen kontur
-                let momen = cv.moments(konturUtama, false);
+let huMat = new cv.Mat();
 
-                let n = momen;
+// Hitung 7 Momen Hu menggunakan OpenCV
+cv.HuMoments(momen, huMat);
 
-                // 7 Momen Hu
-                let hu = [
+// Transformasi logaritmik
+for (let i = 0; i < 7; i++) {
+    let val = huMat.data[i];
 
-                    n.nu20 + n.nu02,
+    huVec[i] = val !== 0 && Number.isFinite(val)
+        ? -Math.sign(val) * Math.log10(Math.abs(val))
+        : 0;
+}
 
-                    Math.pow(n.nu20 - n.nu02, 2) +
-                    4 * Math.pow(n.nu11, 2),
-
-                    Math.pow(n.nu30 - 3 * n.nu12, 2) +
-                    Math.pow(3 * n.nu21 - n.nu03, 2),
-
-                    Math.pow(n.nu30 + n.nu12, 2) +
-                    Math.pow(n.nu21 + n.nu03, 2),
-
-                    (n.nu30 - 3 * n.nu12) *
-                    (n.nu30 + n.nu12) *
-                    (
-                        Math.pow(n.nu30 + n.nu12, 2) -
-                        3 * Math.pow(n.nu21 + n.nu03, 2)
-                    ) +
-                    (3 * n.nu21 - n.nu03) *
-                    (n.nu21 + n.nu03) *
-                    (
-                        3 * Math.pow(n.nu30 + n.nu12, 2) -
-                        Math.pow(n.nu21 + n.nu03, 2)
-                    ),
-
-                    (n.nu20 - n.nu02) *
-                    (
-                        Math.pow(n.nu30 + n.nu12, 2) -
-                        Math.pow(n.nu21 + n.nu03, 2)
-                    ) +
-                    4 * n.nu11 *
-                    (n.nu30 + n.nu12) *
-                    (n.nu21 + n.nu03),
-
-                    (3 * n.nu21 - n.nu03) *
-                    (n.nu30 + n.nu12) *
-                    (
-                        Math.pow(n.nu30 + n.nu12, 2) -
-                        3 * Math.pow(n.nu21 + n.nu03, 2)
-                    ) -
-                    (n.nu30 - 3 * n.nu12) *
-                    (n.nu21 + n.nu03) *
-                    (
-                        3 * Math.pow(n.nu30 + n.nu12, 2) -
-                        Math.pow(n.nu21 + n.nu03, 2)
-                    )
-
-                ];
-
-                // Transformasi logaritmik
-                for (let i = 0; i < 7; i++) {
-
-                    let val = hu[i];
-
-                    huVec[i] = val !== 0 && Number.isFinite(val)
-                        ? -Math.sign(val) * Math.log10(Math.abs(val))
-                        : 0;
-
-                }
-
-                konturUtama.delete();
-            }
-
-            return {
-                histVec,
-                huVec,
-                bentukInfo
-            };
-
-        } finally {
+huMat.delete();
+konturUtama.delete();
 
             // ========================================
             // MEMBERSIHKAN MEMORI OPENCV
@@ -821,36 +762,22 @@
     // ========================================
 
         function verifikasiWajah(fiturA, fiturB, ambang) {
+    const skorWarna = ncc(fiturA.histVec, fiturB.histVec);
+    const skorBentuk = ncc(fiturA.huVec, fiturB.huVec);
 
-        const skorWarna = ncc(
-            fiturA.histVec,
-            fiturB.histVec
-        );
+    // Bobot lebih besar untuk bentuk
+    const skorGabungan =
+        (0.3 * skorWarna) + (0.7 * skorBentuk);
 
-        const skorBentuk = ncc(
-            fiturA.huVec,
-            fiturB.huVec
-        );
+    const keputusan =
+        skorGabungan >= ambang ? 'COCOK' : 'TIDAK COCOK';
 
-        // Feature Fusion:
-        // 60% warna + 40% bentuk
-
-        const skorGabungan =
-            (0.6 * skorWarna) +
-            (0.4 * skorBentuk);
-
-        const keputusan =
-            skorGabungan >= ambang
-                ? "COCOK"
-                : "TIDAK COCOK";
-
-        return {
-            skorWarna,
-            skorBentuk,
-            skorGabungan,
-            keputusan
-        };
-
+    return {
+        skorWarna,
+        skorBentuk,
+        skorGabungan,
+        keputusan
+    };
     }
 
     // ========================================
