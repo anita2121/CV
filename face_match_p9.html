@@ -177,16 +177,68 @@
                 rasioAspek: (rect.width / rect.height).toFixed(2)
             };
   // Hitung 7 Momen Hu & Transformasi Logaritmik agar skala seimbang
-            let momen = cv.moments(konturUtama, false);
-            let hu = new cv.Mat();
-            cv.HuMoments(momen, hu);
-            for (let i = 0; i < 7; i++) {
-                let val = hu.doubleAt(i, 0);
-                // Log transform standar untuk menstabilkan rentang nilai Momen Hu
-                huVec[i] = val !== 0 ? -Math.sign(val) * Math.log10(Math.abs(val)) : 0;
-            }
-            hu.delete();
-        }
+            // Hitung momen biasa dan momen terpusat
+let momen = cv.moments(konturUtama, false);
+
+// Hitung 7 Momen Hu secara manual
+let n = momen;
+
+let hu = [
+    n.nu20 + n.nu02,
+
+    Math.pow(n.nu20 - n.nu02, 2) +
+    4 * Math.pow(n.nu11, 2),
+
+    Math.pow(n.nu30 - 3 * n.nu12, 2) +
+    Math.pow(3 * n.nu21 - n.nu03, 2),
+
+    Math.pow(n.nu30 + n.nu12, 2) +
+    Math.pow(n.nu21 + n.nu03, 2),
+
+    (n.nu30 - 3 * n.nu12) *
+    (n.nu30 + n.nu12) *
+    (
+        Math.pow(n.nu30 + n.nu12, 2) -
+        3 * Math.pow(n.nu21 + n.nu03, 2)
+    ) +
+    (3 * n.nu21 - n.nu03) *
+    (n.nu21 + n.nu03) *
+    (
+        3 * Math.pow(n.nu30 + n.nu12, 2) -
+        Math.pow(n.nu21 + n.nu03, 2)
+    ),
+
+    (n.nu20 - n.nu02) *
+    (
+        Math.pow(n.nu30 + n.nu12, 2) -
+        Math.pow(n.nu21 + n.nu03, 2)
+    ) +
+    4 * n.nu11 *
+    (n.nu30 + n.nu12) *
+    (n.nu21 + n.nu03),
+
+    (3 * n.nu21 - n.nu03) *
+    (n.nu30 + n.nu12) *
+    (
+        Math.pow(n.nu30 + n.nu12, 2) -
+        3 * Math.pow(n.nu21 + n.nu03, 2)
+    ) -
+    (n.nu30 - 3 * n.nu12) *
+    (n.nu21 + n.nu03) *
+    (
+        3 * Math.pow(n.nu30 + n.nu12, 2) -
+        Math.pow(n.nu21 + n.nu03, 2)
+    )
+];
+
+// Transformasi logaritmik
+for (let i = 0; i < 7; i++) {
+    let val = hu[i];
+    huVec[i] = val !== 0
+        ? -Math.sign(val) * Math.log10(Math.abs(val))
+        : 0;
+    }
+        
 
         // Bersihkan memori OpenCV (Wajib untuk mencegah memory leak)
         src.delete(); rgb.delete(); gray.delete(); channels.delete();
