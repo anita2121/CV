@@ -47,10 +47,39 @@
     </div>
 
     <div class="controls">
-        <label for="threshold"><strong>Ambang Verifikasi (Threshold):</strong> <span id="threshVal">0.85</span></label>
-        <input type="range" id="threshold" min="0.50" max="0.99" step="0.01" value="0.85">
-        <button id="btnVerify" disabled>Jalankan Verifikasi Wajah</button>
-    </div>
+    <label for="threshold">
+        <strong>Ambang Verifikasi (Threshold):</strong>
+        <span id="threshVal">0.85</span>
+    </label>
+    <input type="range" id="threshold" min="0.50" max="0.99"
+           step="0.01" value="0.85">
+
+    <button id="btnVerify" disabled>
+        Jalankan Verifikasi Wajah
+    </button>
+</div>
+
+<div class="controls">
+    <label for="rotation">
+        <strong>Rotasi Objek B:</strong>
+        <span id="rotationVal">0°</span>
+    </label>
+
+    <input type="range" id="rotation"
+           min="-45" max="45" step="5" value="0">
+
+    <label for="zoom">
+        <strong>Zoom Objek B:</strong>
+        <span id="zoomVal">1.0x</span>
+    </label>
+
+    <input type="range" id="zoom"
+           min="0.5" max="1.5" step="0.1" value="1">
+
+    <button type="button" id="btnResetTransform">
+        Reset Transformasi
+    </button>
+</div>
 
     <div id="resultBox" class="result-box">
         <h2 id="decisionText" style="margin-top:0;"></h2>
@@ -74,6 +103,7 @@
 
 <script>
     let imgLoadedA = false, imgLoadedB = false;
+let originalImageB = null;
 
     function onOpenCvReady() {
         cv['onRuntimeInitialized'] = () => {
@@ -97,13 +127,25 @@
             if (!file) return;
             const img = new Image();
             img.onload = () => {
-                const canvas = document.getElementById(canvasId);
-                const ctx = canvas.getContext('2d');
-                // Optimasi: Resize ke dimensi standar 200x200 agar ekstraksi fitur cepat & konsisten
-                canvas.width = 200;
-                canvas.height = 200;
-  ctx.drawImage(img, 0, 0, 200, 200);
-                flagSetter();
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = 200;
+    canvas.height = 200;
+
+    ctx.drawImage(img, 0, 0, 200, 200);
+
+    // Simpan gambar asli Objek B
+    if (canvasId === 'canvasB') {
+        originalImageB = img;
+    }
+
+    flagSetter();
+
+    if (imgLoadedA && imgLoadedB) {
+        document.getElementById('btnVerify').disabled = false;
+    }
+};
                 if (imgLoadedA && imgLoadedB) {
                     document.getElementById('btnVerify').disabled = false;
                 }
@@ -114,7 +156,64 @@
 
     loadImageToCanvas(document.getElementById('inputA'), 'canvasA', () => imgLoadedA = true);
     loadImageToCanvas(document.getElementById('inputB'), 'canvasB', () => imgLoadedB = true);
+// ========================================
+// FITUR PENGUJIAN ROTASI DAN ZOOM
+// ========================================
 
+const rotationSlider = document.getElementById('rotation');
+const zoomSlider = document.getElementById('zoom');
+const rotationVal = document.getElementById('rotationVal');
+const zoomVal = document.getElementById('zoomVal');
+
+function applyTransform() {
+    if (!originalImageB) return;
+
+    const canvas = document.getElementById('canvasB');
+    const ctx = canvas.getContext('2d');
+
+    const angle = parseFloat(rotationSlider.value);
+    const zoom = parseFloat(zoomSlider.value);
+
+    rotationVal.textContent = angle + '°';
+    zoomVal.textContent = zoom.toFixed(1) + 'x';
+
+    // Bersihkan canvas dan gunakan latar belakang putih
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Transformasi dilakukan dari titik tengah gambar
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(angle * Math.PI / 180);
+    ctx.scale(zoom, zoom);
+
+    ctx.drawImage(
+        originalImageB,
+        -canvas.width / 2,
+        -canvas.height / 2,
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.restore();
+}
+
+// Ketika slider rotasi berubah
+rotationSlider.addEventListener('input', applyTransform);
+
+// Ketika slider zoom berubah
+zoomSlider.addEventListener('input', applyTransform);
+
+// Reset ke gambar asli
+document.getElementById('btnResetTransform')
+    .addEventListener('click', () => {
+
+        rotationSlider.value = 0;
+        zoomSlider.value = 1;
+
+        applyTransform();
+    });
     /**
      * MODUL EKSTRAKSI DESKRIPTOR OBJEK (Sesuai Materi P9)
      */
