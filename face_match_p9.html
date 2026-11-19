@@ -67,16 +67,61 @@
 
 </div>  <!-- Memuat OpenCV.js -->  <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();"></script>  <script>  
     let imgLoadedA = false, imgLoadedB = false;  
+    let faceCascade = null;
+let faceCascadeReady = false;
   
-    function onOpenCvReady() {  
-        cv['onRuntimeInitialized'] = () => {  
-            const status = document.getElementById('status');  
-            status.textContent = 'OpenCV.js Siap! Silakan unggah kedua gambar wajah.';  
-            status.classList.add('ready');  
-            document.getElementById('inputA').disabled = false;  
-            document.getElementById('inputB').disabled = false;  
-        };  
-    }  
+    function onOpenCvReady() {
+    cv['onRuntimeInitialized'] = async () => {
+        const status = document.getElementById('status');
+
+        try {
+            const response = await fetch(
+                './haarcascade_frontalface_default.xml'
+            );
+
+            if (!response.ok) {
+                throw new Error('File Haar Cascade tidak ditemukan');
+            }
+
+            const data = new Uint8Array(
+                await response.arrayBuffer()
+            );
+
+            cv.FS_createDataFile(
+                '/',
+                'haarcascade_frontalface_default.xml',
+                data,
+                true,
+                false,
+                false
+            );
+
+            faceCascade = new cv.CascadeClassifier();
+
+faceCascadeReady = faceCascade.load(
+    'haarcascade_frontalface_default.xml'
+);
+
+if (!faceCascadeReady) {
+    throw new Error('Haar Cascade gagal dimuat');
+}
+
+            status.textContent =
+                'OpenCV dan Deteksi Wajah Siap!';
+
+            status.classList.add('ready');
+
+            document.getElementById('inputA').disabled = false;
+            document.getElementById('inputB').disabled = false;
+
+        } catch (error) {
+            status.textContent =
+                'Gagal memuat Haar Cascade: ' + error.message;
+
+            console.error(error);
+        }
+    };
+    }
   
     // Update tampilan slider ambang batas  
     document.getElementById('threshold').addEventListener('input', (e) => {  
@@ -112,15 +157,91 @@
      * MODUL EKSTRAKSI DESKRIPTOR OBJEK (Sesuai Materi P9)  
      */  
     function ekstrakFiturObjek(canvasId) {  
-        let src = cv.imread(canvasId);  
-        let rgb = new cv.Mat();  
-        let gray = new cv.Mat();  
-          
-        // Optimasi Pencahayaan: Konversi ke RGB & Grayscale + GaussianBlur untuk kurangi noise  
-        cv.cvtColor(src, rgb, cv.COLOR_RGBA2RGB);  
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);  
-        cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);  
-  
+        let src = cv.imread(canvasId);
+
+if (!faceCascadeReady) {
+    src.delete();
+    throw new Error('Deteksi wajah belum siap');
+}
+
+// Grayscale untuk deteksi wajah
+let grayFull = new cv.Mat();
+
+cv.cvtColor(
+    src,
+    grayFull,
+    cv.COLOR_RGBA2GRAY
+);
+
+cv.GaussianBlur(
+    grayFull,
+    grayFull,
+    new cv.Size(5, 5),
+    0
+);
+
+// DETEKSI ROI WAJAH
+let faces = new cv.RectVector();
+
+faceCascade.detectMultiScale(
+    grayFull,
+    faces,
+    1.1,
+    4,
+    0,
+    new cv.Size(30, 30)
+);
+
+// Periksa apakah wajah ditemukan
+if (faces.size() === 0) {
+    src.delete();
+    grayFull.delete();
+    faces.delete();
+
+    throw new Error(
+        'Wajah tidak terdeteksi. Gunakan foto wajah menghadap kamera.'
+    );
+}
+
+// Pilih area wajah dengan ukuran terbesar
+let maxFaceArea = 0;
+let faceRect = null;
+
+for (let i = 0; i < faces.size(); i++) {
+    let rect = faces.get(i);
+    let area = rect.width * rect.height;
+
+    if (area > maxFaceArea) {
+        maxFaceArea = area;
+        faceRect = rect;
+    }
+}
+
+// Potong ROI wajah
+let roi = src.roi(faceRect);
+
+// Konversi ROI ke RGB dan Grayscale
+let rgb = new cv.Mat();
+let gray = new cv.Mat();
+
+cv.cvtColor(
+    roi,
+    rgb,
+    cv.COLOR_RGBA2RGB
+);
+
+cv.cvtColor(
+    roi,
+    gray,
+    cv.COLOR_RGBA2GRAY
+);
+
+cv.GaussianBlur(
+    gray,
+    gray,
+    new cv.Size(5, 5),
+    0
+);
         // 1. DESKRIPTOR WARNA: Histogram RGB (3 x 64 bins terkompresi agar ringkas)  
         let channels = new cv.MatVector();  
         cv.split(rgb, channels);  
@@ -156,90 +277,70 @@
             if (area > maxArea) { maxArea = area; maxIdx = i; }  
         }  
   
-        let huVec = new Array(7).fill(0);  
-        let bentukInfo = { luas: 0, keliling: 0, rasioAspek: 0 };  
+        let huVec = new Array(7).fill(0);
+
+let bentukInfo = {
+    luas: 0,
+    keliling: 0,
+    rasioAspek: 0,
+    roiWidth: roi.cols,
+    roiHeight: roi.rows
+};  
   
         if (maxIdx !== -1) {  
             
             let konturUtama = contours.get(maxIdx);  
             let keliling = cv.arcLength(konturUtama, true);  
             let rect = cv.boundingRect(konturUtama);  
-            bentukInfo = {  
-                luas: maxArea.toFixed(0),  
-                keliling: keliling.toFixed(1),  
-                rasioAspek: (rect.width / rect.height).toFixed(2)  
+            bentukInfo = {
+    luas: maxArea.toFixed(0),
+    keliling: keliling.toFixed(1),
+    rasioAspek: (rect.width / rect.height).toFixed(2),
+    roiWidth: roi.cols,
+    roiHeight: roi.rows
             };  
-  // Hitung 7 Momen Hu & Transformasi Logaritmik agar skala seimbang  
-            // Hitung momen biasa dan momen terpusat  
-let momen = cv.moments(konturUtama, false);  
-  
-// Hitung 7 Momen Hu secara manual  
-let n = momen;  
-  
-let hu = [  
-    n.nu20 + n.nu02,  
-  
-    Math.pow(n.nu20 - n.nu02, 2) +  
-    4 * Math.pow(n.nu11, 2),  
-  
-    Math.pow(n.nu30 - 3 * n.nu12, 2) +  
-    Math.pow(3 * n.nu21 - n.nu03, 2),  
-  
-    Math.pow(n.nu30 + n.nu12, 2) +  
-    Math.pow(n.nu21 + n.nu03, 2),  
-  
-    (n.nu30 - 3 * n.nu12) *  
-    (n.nu30 + n.nu12) *  
-    (  
-        Math.pow(n.nu30 + n.nu12, 2) -  
-        3 * Math.pow(n.nu21 + n.nu03, 2)  
-    ) +  
-    (3 * n.nu21 - n.nu03) *  
-    (n.nu21 + n.nu03) *  
-    (  
-        3 * Math.pow(n.nu30 + n.nu12, 2) -  
-        Math.pow(n.nu21 + n.nu03, 2)  
-    ),  
-  
-    (n.nu20 - n.nu02) *  
-    (  
-        Math.pow(n.nu30 + n.nu12, 2) -  
-        Math.pow(n.nu21 + n.nu03, 2)  
-    ) +  
-    4 * n.nu11 *  
-    (n.nu30 + n.nu12) *  
-    (n.nu21 + n.nu03),  
-  
-    (3 * n.nu21 - n.nu03) *  
-    (n.nu30 + n.nu12) *  
-    (  
-        Math.pow(n.nu30 + n.nu12, 2) -  
-        3 * Math.pow(n.nu21 + n.nu03, 2)  
-    ) -  
-    (n.nu30 - 3 * n.nu12) *  
-    (n.nu21 + n.nu03) *  
-    (  
-        3 * Math.pow(n.nu30 + n.nu12, 2) -  
-        Math.pow(n.nu21 + n.nu03, 2)  
-    )  
-];  
-  
-// Transformasi logaritmik  
-for (let i = 0; i < 7; i++) {  
-    let val = hu[i];  
-    huVec[i] = val !== 0  
-        ? -Math.sign(val) * Math.log10(Math.abs(val))  
-        : 0;  
-    }  
-        }       
-  
-        // Bersihkan memori OpenCV (Wajib untuk mencegah memory leak)  
-        src.delete(); rgb.delete(); gray.delete(); channels.delete();  
-        mask.delete(); binary.delete(); contours.delete(); hierarchy.delete();  
-  
+// Hitung momen kontur
+let momen = cv.moments(konturUtama, false);
+
+// Hitung 7 Momen Hu menggunakan OpenCV
+let huMat = new cv.Mat();
+
+cv.HuMoments(momen, huMat);
+
+// Transformasi logaritmik
+for (let i = 0; i < 7; i++) {
+
+    let val = huMat.doubleAt(i, 0);
+
+    huVec[i] = (
+        Number.isFinite(val) && val !== 0
+    )
+        ? -Math.sign(val) * Math.log10(Math.abs(val))
+        : 0;
+}
+
+huMat.delete();
+    }
+  // Bersihkan memori OpenCV
+src.delete();
+rgb.delete();
+gray.delete();
+
+channels.delete();
+mask.delete();
+binary.delete();
+contours.delete();
+hierarchy.delete();
+
+// Bersihkan memori ROI
+roi.delete();
+grayFull.delete();
+faces.delete();
+        
         return { histVec, huVec, bentukInfo };  
     }  
   
+    
     /**  
      * MODUL VERIFIKASI (vision-core/verify)  
      * Menghitung Normalized Cross-Correlation (NCC)  
@@ -318,6 +419,18 @@ document.getElementById('btnVerify').addEventListener('click', () => {
                 <td>Luas: ${fiturB.bentukInfo.luas}, Rasio: ${fiturB.bentukInfo.rasioAspek}</td>  
                 <td>-</td>  
             </tr>  
+            <tr>
+    <td><strong>Deteksi ROI Wajah</strong></td>
+    <td>
+        ${fiturA.bentukInfo.roiWidth} ×
+        ${fiturA.bentukInfo.roiHeight} px
+    </td>
+    <td>
+        ${fiturB.bentukInfo.roiWidth} ×
+        ${fiturB.bentukInfo.roiHeight} px
+    </td>
+    <td>Berhasil</td>
+</tr>
         `;  
   
     } catch (error) {  
