@@ -301,26 +301,48 @@ let bentukInfo = {
             };  
 // Hitung momen kontur
 let momen = cv.moments(konturUtama, false);
+            if (momen.m00 !== 0) {
+    // Letakkan seluruh perhitungan Momen Hu manual
+            }
 
-// Hitung 7 Momen Hu menggunakan OpenCV
-let huMat = new cv.Mat();
+// Hitung 7 Momen Hu secara manual
+let huMat = new Array(7).fill(0);
 
-cv.HuMoments(momen, huMat);
+let n20 = momen.mu20 / Math.pow(momen.m00, 2);
+let n02 = momen.mu02 / Math.pow(momen.m00, 2);
+let n11 = momen.mu11 / Math.pow(momen.m00, 2);
+let n30 = momen.mu30 / Math.pow(momen.m00, 2.5);
+let n12 = momen.mu12 / Math.pow(momen.m00, 2.5);
+let n21 = momen.mu21 / Math.pow(momen.m00, 2.5);
+let n03 = momen.mu03 / Math.pow(momen.m00, 2.5);
+
+huMat[0] = n20 + n02;
+huMat[1] = Math.pow(n20 - n02, 2) + 4 * Math.pow(n11, 2);
+huMat[2] = Math.pow(n30 - 3*n12, 2) + Math.pow(3*n21 - n03, 2);
+huMat[3] = Math.pow(n30 + n12, 2) + Math.pow(n21 + n03, 2);
+huMat[4] = (n30 - 3*n12) * (n30 + n12) *
+           (Math.pow(n30 + n12, 2) - 3*Math.pow(n21 + n03, 2)) +
+           (3*n21 - n03) * (n21 + n03) *
+           (3*Math.pow(n30 + n12, 2) - Math.pow(n21 + n03, 2));
+huMat[5] = (n20 - n02) *
+           (Math.pow(n30 + n12, 2) - Math.pow(n21 + n03, 2)) +
+           4*n11*(n30 + n12)*(n21 + n03);
+huMat[6] = (3*n21 - n03)*(n30 + n12) *
+           (Math.pow(n30 + n12, 2) - 3*Math.pow(n21 + n03, 2)) -
+           (n30 - 3*n12)*(n21 + n03) *
+           (3*Math.pow(n30 + n12, 2) - Math.pow(n21 + n03, 2));
 
 // Transformasi logaritmik
 for (let i = 0; i < 7; i++) {
-
-    let val = huMat.doubleAt(i, 0);
-
+    let val = huMat[i];
+    
     huVec[i] = (
         Number.isFinite(val) && val !== 0
     )
         ? -Math.sign(val) * Math.log10(Math.abs(val))
         : 0;
 }
-
-huMat.delete();
-    }
+            }
   // Bersihkan memori OpenCV
 src.delete();
 rgb.delete();
