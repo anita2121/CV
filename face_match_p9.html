@@ -222,20 +222,37 @@
     }
 
     // Eksekusi saat tombol diklik
-    document.getElementById('btnVerify').addEventListener('click', () => {
-        const ambang = parseFloat(document.getElementById('threshold').value);
+document.getElementById('btnVerify').addEventListener('click', () => {
+    const btn = document.getElementById('btnVerify');
+    const box = document.getElementById('resultBox');
+    const decisionText = document.getElementById('decisionText');
+    const scoreDetail = document.getElementById('scoreDetail');
+    const tbody = document.getElementById('metricsBody');
+
+    btn.disabled = true;
+    btn.textContent = 'Memproses...';
+
+    try {
+        const ambang = parseFloat(
+            document.getElementById('threshold').value
+        );
+
         const fiturA = ekstrakFiturObjek('canvasA');
         const fiturB = ekstrakFiturObjek('canvasB');
+
         const hasil = verifikasiWajah(fiturA, fiturB, ambang);
-  const box = document.getElementById('resultBox');
-        const decisionText = document.getElementById('decisionText');
-        const scoreDetail = document.getElementById('scoreDetail');
-        const tbody = document.getElementById('metricsBody');
 
         box.style.display = 'block';
-        box.className = 'result-box ' + (hasil.keputusan === 'COCOK' ? 'match' : 'no-match');
-        decisionText.textContent = `Keputusan Verifikasi: ${hasil.keputusan}`;
-        scoreDetail.innerHTML = `<strong>Skor Kemiripan Gabungan:</strong> ${hasil.skorGabungan.toFixed(4)} (Ambang Batas: ${ambang.toFixed(2)})`;
+        box.className = 'result-box ' +
+            (hasil.keputusan === 'COCOK' ? 'match' : 'no-match');
+
+        decisionText.textContent =
+            `Keputusan Verifikasi: ${hasil.keputusan}`;
+
+        scoreDetail.innerHTML =
+            `<strong>Skor Kemiripan Gabungan:</strong> ` +
+            `${hasil.skorGabungan.toFixed(4)} ` +
+            `(Ambang Batas: ${ambang.toFixed(2)})`;
 
         tbody.innerHTML = `
             <tr>
@@ -257,7 +274,21 @@
                 <td>-</td>
             </tr>
         `;
-    });
+
+    } catch (error) {
+        box.style.display = 'block';
+        box.className = 'result-box no-match';
+        decisionText.textContent = 'Terjadi Kesalahan';
+        scoreDetail.textContent =
+            error.message || String(error);
+        tbody.innerHTML = '';
+        console.error('Kesalahan verifikasi:', error);
+
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Jalankan Verifikasi Wajah';
+    }
+});
 </script>
 </body>
 </html>
